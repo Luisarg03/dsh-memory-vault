@@ -1,38 +1,38 @@
 # memory-vault (starter)
 
-Vault de memoria OKF (Obsidian Knowledge Format) para los plugins de memoria de DSH.
+OKF (Obsidian Knowledge Format) memory vault for the DSH memory plugins.
 
-Este directorio contiene el **esqueleto público** del vault: plantillas, type registry
-y vocabulario de tags. Los datos (`projects/`, `raw/`, `logs/`, `memory.db`, `index.md`,
-`log.md`) se generan localmente y están excluidos de git (`.gitignore`).
+This directory is the **public skeleton** of the vault: templates, type registry
+and tag vocabulary. Runtime data (`projects/`, `raw/`, `logs/`, `memory.db`,
+`index.md`, `log.md`) is generated locally and excluded from git (`.gitignore`).
 
-## Estructura
+## Structure
 
 ```
 memory-vault/
-├── templates/          # plantillas OKF por tipo de entrada
-├── type-registry.yaml  # registro de tipos (fuente de verdad)
-├── tag-vocabulary.json # normalización de tags
-├── projects/           # entradas por proyecto (se crean al primer uso)
-├── raw/                # entradas Source sueltas (se crean al primer uso)
-├── logs/               # logs del digest (se crean al primer uso)
-└── memory.db           # índice SQLite (FTS5), rebuildable desde markdown
+├── templates/          # OKF templates per entry type
+├── type-registry.yaml  # type registry (source of truth)
+├── tag-vocabulary.json # tag normalization
+├── projects/           # per-project entries (created on first use)
+├── raw/                # loose Source entries (created on first use)
+├── logs/               # digest logs (created on first use)
+└── memory.db           # SQLite index (FTS5), rebuildable from markdown
 ```
 
-Los directorios `projects/`, `raw/` y `logs/` y `memory.db` los crea
-`memory-vault-server` automáticamente al primer uso (`MemoryStore.__init__`).
+`projects/`, `raw/`, `logs/` and `memory.db` are created automatically by
+`memory-vault-server` on first use (`MemoryStore.__init__`).
 
-## Uso
+## Usage
 
-Apuntar el server (o los plugins `memory-mcp` / `memory-auto`) a este directorio
-con la env var `MEMORY_PATH` (o `DSH_MEMORY_PATH` para los plugins DSH):
+Point the server (or the `memory-mcp` / `memory-auto` plugins) at this directory
+with the `MEMORY_PATH` env var (or `DSH_MEMORY_PATH` for the DSH plugins):
 
 ```sh
 MEMORY_PATH=./memory-vault uv run --directory ./memory-vault-server python server.py
 ```
 
-## Rebuild del índice
+## Rebuilding the index
 
-El índice SQLite es un derivado de los markdown; si falta o está corrupto se puede
-reconstruir con las tools de escritura del server (`store_*`), que upsertan cada
-entrada desde su archivo.
+The SQLite index is derived from the markdown; if it is missing or corrupted it
+can be rebuilt with the server's `store_*` write tools, which upsert each entry
+from its file.

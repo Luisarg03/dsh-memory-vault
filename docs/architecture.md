@@ -8,7 +8,8 @@ declares a `dsh.bundle` manifest and mounts with
 
 ## Component overview
 
-Interactive diagram (open in any browser): [stack.html](diagrams/stack.html)
+![Stack architecture](diagrams/stack.png)
+<sub>[Interactive version](diagrams/stack.html)</sub>
 
 ```
 DeepSeek Harness (web / headless)  ← plugins mounted in the profile process
@@ -46,7 +47,8 @@ DeepSeek Harness (web / headless)  ← plugins mounted in the profile process
 
 ## Session digest pipeline
 
-Interactive diagram: [session-digest.html](diagrams/session-digest.html)
+![Session digest pipeline](diagrams/session-digest.png)
+<sub>[Interactive version](diagrams/session-digest.html)</sub>
 
 Session events are captured by `memory-auto` at checkpoints. When the gate
 passes (activity recorded and transcript ≥ `minTranscriptChars`), the plugin
@@ -57,7 +59,8 @@ from the Markdown whenever needed.
 
 ## MCP tool call
 
-Interactive diagram: [mcp-tool-call.html](diagrams/mcp-tool-call.html)
+![MCP tool call](diagrams/mcp-tool-call.png)
+<sub>[Interactive version](diagrams/mcp-tool-call.html)</sub>
 
 The agent issues `tools/call`; `memory-mcp` forwards JSON-RPC over stdio to
 `memory-vault-server` (spawned with `uv run`), which queries the store and
@@ -66,7 +69,8 @@ never takes the agent down.
 
 ## Per-session capture lifecycle
 
-Interactive diagram: [capture-lifecycle.html](diagrams/capture-lifecycle.html)
+![Capture lifecycle](diagrams/capture-lifecycle.png)
+<sub>[Interactive version](diagrams/capture-lifecycle.html)</sub>
 
 Sessions are registered on creation; the capture rail runs
 `created → active → gate → checkpoint → queued → digested`. The gate only
