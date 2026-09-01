@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Ciclo de captura de memoria por sesión",
+    "output": "capture-lifecycle.html",
+    "quality_profile": "showcase",
+    "viewBox": [1040, 660],
+    "views": [
+      { "id": "main-path", "label": "Ciclo principal", "focus": ["created", "active", "gate", "checkpoint", "queued", "digested", "ended"], "note": "La sesión vive y los checkpoints digieren a medida que ocurre actividad." }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Ciclo de captura" },
+    { "id": "side", "label": "Digest" },
+    { "id": "terminal", "label": "Cierre" }
+  ],
+  "states": [
+    { "id": "created", "type": "start", "label": "Sesión creada", "sublabel": "registrada por memory-auto", "lane": "main", "col": 0, "step": "01", "tag": "entrada", "width": 118 },
+    { "id": "active", "type": "active", "label": "Sesión activa", "sublabel": "idle · commit · compaction · fin", "lane": "main", "col": 1, "step": "02", "tag": "trabajo", "width": 140 },
+    { "id": "gate", "type": "decision", "label": "¿Digest?", "sublabel": "actividad · transcript mínimo", "lane": "main", "col": 2, "step": "03", "tag": "gate", "width": 140 },
+    { "id": "checkpoint", "type": "active", "label": "Checkpoint", "sublabel": "captura del estado actual", "lane": "main", "col": 3, "tag": "disparo", "width": 140 },
+    { "id": "queued", "type": "waiting", "label": "Digest en cola", "sublabel": "spawn digest_session.py", "lane": "main", "col": 4, "tag": "uv run", "width": 140 },
+    { "id": "digested", "type": "success", "label": "Entradas OKF", "sublabel": "escritas en el vault", "lane": "side", "col": 0, "step": "04", "tag": "listo" },
+    { "id": "ended", "type": "success", "label": "Sesión terminada", "sublabel": "digest post-sesión", "lane": "terminal", "col": 0, "step": "05", "tag": "cierre" }
+  ],
+  "transitions": [
+    { "id": "gate-skip", "from": "gate", "to": "active", "label": "sin actividad · ya entregado", "variant": "dashed", "fromSide": "top", "toSide": "top", "via": [[402, 100], [248, 100], [248, 126]] },
+    { "id": "digest-ok", "from": "queued", "to": "digested", "label": "digest + LLM OK", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "via": [[710, 240], [402, 240], [402, 278]] },
+    { "id": "end-session", "from": "active", "to": "ended", "label": "fin de sesión", "fromSide": "bottom", "toSide": "top", "via": [[248, 460], [402, 460], [402, 479]], "labelAt": [300, 446] }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Captura", "items": ["checkpoints en idle, commit, compaction y fin de sesión", "digest post-sesión al cerrar (dispose)"] },
+    { "dot": "amber", "title": "Decisión", "items": ["solo digiere si hay actividad registrada", "transcript mínimo configurable (minTranscriptChars)"] },
+    { "dot": "violet", "title": "Recuperación", "items": ["un digest fallido se reintenta sin perder la cola", "la sesión sigue activa mientras tanto"] }
+  ]
+}

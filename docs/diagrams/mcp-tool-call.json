@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Llamada a tool MCP — del agente al vault",
+    "output": "mcp-tool-call.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [860, 560],
+    "views": [
+      { "id": "call-path", "label": "Llamada y respuesta", "focus": ["agent", "mcp-client", "server", "vault"], "note": "Un tools/call viaja por stdio JSON-RPC hasta el vault y vuelve." }
+    ]
+  },
+  "participants": [
+    { "id": "agent", "type": "external", "label": "Agente DSH", "sublabel": "sesión activa" },
+    { "id": "mcp-client", "type": "backend", "label": "memory-mcp", "sublabel": "client MCP stdio" },
+    { "id": "server", "type": "backend", "label": "memory-vault-server", "sublabel": "Python · uv run" },
+    { "id": "vault", "type": "database", "label": "memory-vault", "sublabel": "SQLite FTS5 + Markdown" }
+  ],
+  "segments": [
+    { "from": 150, "to": 250, "label": "Llamada" },
+    { "from": 262, "to": 340, "label": "Consulta al vault" },
+    { "from": 352, "to": 430, "label": "Respuesta" }
+  ],
+  "messages": [
+    { "id": "tool-call", "from": "agent", "to": "mcp-client", "y": 185, "label": "tools/call · search_memory", "variant": "emphasis" },
+    { "id": "jsonrpc", "from": "mcp-client", "to": "server", "y": 228, "label": "JSON-RPC sobre stdio", "variant": "emphasis", "note": "el client hace spawn del server con uv run" },
+    { "id": "query", "from": "server", "to": "vault", "y": 280, "label": "SELECT FTS5 + markdown", "variant": "emphasis" },
+    { "id": "rows", "from": "vault", "to": "server", "y": 320, "label": "resultados", "variant": "return" },
+    { "id": "tool-result", "from": "server", "to": "mcp-client", "y": 370, "label": "resultado del tool", "variant": "return" },
+    { "id": "agent-result", "from": "mcp-client", "to": "agent", "y": 412, "label": "respuesta del tool", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "mcp-client", "from": 185, "to": 415, "type": "backend" },
+    { "participant": "server", "from": 228, "to": 375, "type": "backend" },
+    { "participant": "vault", "from": 275, "to": 325, "type": "database" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Contrato MCP", "items": ["transport stdio, mensajes JSON-RPC", "10 tools: search_memory, store_*, export_memories, get_profile, ping"] },
+    { "dot": "emerald", "title": "Almacenamiento", "items": ["markdown OKF como fuente de verdad", "SQLite FTS5 como índice de búsqueda derivado"] },
+    { "dot": "violet", "title": "Aislamiento", "items": ["el server corre como proceso uv separado", "un fallo del server no derriba al agente"] }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "dsh-memory-vault — stack de memoria persistente para DeepSeek Harness",
+    "output": "stack.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "mcp-path", "label": "Conexión MCP", "focus": ["dsh", "memory-mcp", "server", "vault"], "note": "El agente usa las 10 tools del vault a través del client MCP stdio." },
+      { "id": "digest-path", "label": "Captura automática", "focus": ["dsh", "memory-auto", "digest", "opencode", "vault"], "note": "Los checkpoints de sesión generan entradas OKF vía el digest con LLM externo." }
+    ]
+  },
+  "components": [
+    { "id": "dsh", "type": "external", "label": "DeepSeek Harness", "sublabel": "web / headless · perfil", "pos": [40, 150], "size": [150, 64] },
+    { "id": "memory-mcp", "type": "backend", "label": "memory-mcp", "sublabel": "@dsh-memory/memory-mcp · client MCP stdio", "pos": [300, 60], "size": [170, 64] },
+    { "id": "memory-auto", "type": "backend", "label": "memory-auto", "sublabel": "@dsh-memory/memory-auto · hooks de sesión", "pos": [300, 260], "size": [170, 64] },
+    { "id": "server", "type": "backend", "label": "memory-vault-server", "sublabel": "Python · MCP server · 10 tools", "pos": [560, 60], "size": [170, 64] },
+    { "id": "digest", "type": "backend", "label": "digest_session.py", "sublabel": "transcript → entradas OKF", "pos": [560, 260], "size": [170, 64] },
+    { "id": "vault", "type": "database", "label": "memory-vault", "sublabel": "OKF · SQLite FTS5 + Markdown", "pos": [820, 60], "size": [170, 64] },
+    { "id": "opencode", "type": "external", "label": "opencode CLI", "sublabel": "LLM externo (extracción)", "pos": [820, 260], "size": [170, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Plugins cordis (en proceso)", "wraps": ["memory-mcp", "memory-auto"] },
+    { "kind": "region", "label": "Procesos hijos (uv run)", "wraps": ["server", "digest"] }
+  ],
+  "connections": [
+    { "id": "mount-mcp", "from": "dsh", "to": "memory-mcp", "label": "monta bundle", "variant": "dashed" },
+    { "id": "mount-auto", "from": "dsh", "to": "memory-auto", "label": "monta bundle", "variant": "dashed" },
+    { "id": "mcp-stdio", "from": "memory-mcp", "to": "server", "label": "MCP stdio · JSON-RPC", "variant": "emphasis", "labelAt": [515, 150] },
+    { "id": "store-io", "from": "server", "to": "vault", "label": "SQLite FTS5 + Markdown", "variant": "emphasis", "labelAt": [840, 150] },
+    { "id": "checkpoint-mcp", "from": "memory-auto", "to": "server", "label": "checkpoint /brain · MCP", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "via": [[385, 180], [645, 180], [645, 124]], "labelAt": [385, 220] },
+    { "id": "spawn-digest", "from": "memory-auto", "to": "digest", "label": "spawn · uv run", "variant": "dashed", "labelAt": [515, 340] },
+    { "id": "llm-extract", "from": "digest", "to": "opencode", "label": "LLM · extracción de entradas", "variant": "dashed", "labelAt": [775, 340] },
+    { "id": "okf-write", "from": "digest", "to": "vault", "label": "entradas OKF", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "via": [[645, 240], [690, 240], [690, 180], [905, 180], [905, 124]], "labelAt": [700, 145] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Conexión MCP", "items": ["memory-mcp expone el vault como tools del agente", "10 tools: search_memory, store_*, export_memories, get_profile, ping"] },
+    { "dot": "emerald", "title": "Captura automática", "items": ["checkpoints en idle, commit, compaction y fin de sesión", "digest post-sesión delegado a opencode CLI (sin credenciales propias)"] },
+    { "dot": "violet", "title": "Almacenamiento OKF", "items": ["markdown como fuente de verdad (projects/, raw/)", "SQLite FTS5 como índice derivado, rebuildable"] }
+  ]
+}
