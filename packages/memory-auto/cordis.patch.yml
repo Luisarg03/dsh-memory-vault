@@ -1,0 +1,10 @@
+# bundle @dsh-memory/memory-auto
+# overrides vía env: DSH_MEMORY_PATH, DSH_DIGEST_SCRIPT
+- insert:
+    - id: memory-auto
+      name: '@dsh-memory/memory-auto'
+      config:
+        memoryPath: !!js process.env.DSH_MEMORY_PATH ?? './memory-vault'
+        digestScript: !!js process.env.DSH_DIGEST_SCRIPT ?? './scripts/digest_session.py'
+        minTranscriptChars: 200
+        enabled: true
