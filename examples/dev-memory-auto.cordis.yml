@@ -1,0 +1,20 @@
+# dev overlay — memory-mcp + memory-auto
+# overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR, DSH_DIGEST_SCRIPT
+- insert:
+    - id: memory-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: memory
+        transport: stdio
+        command: uv
+        args: [run, --directory, !!js process.env.DSH_MEMORY_SERVER_DIR ?? process.cwd() + '/memory-vault-server', python, server.py]
+        env:
+          MEMORY_PATH: !!js process.env.DSH_MEMORY_PATH ?? process.cwd() + '/memory-vault'
+          UV_CACHE_DIR: /tmp/uv-cache
+        cwd: !!js process.cwd()
+    - id: memory-auto
+      name: !!js process.cwd() + '/packages/memory-auto/src/index.ts'
+      config:
+        memoryPath: !!js process.env.DSH_MEMORY_PATH ?? process.cwd() + '/memory-vault'
+        digestScript: !!js process.env.DSH_DIGEST_SCRIPT ?? process.cwd() + '/scripts/digest_session.py'
+        enabled: true
