@@ -1,0 +1,75 @@
+# Type Registry — single source of truth for all entry types.
+# See openspec/changes/vault-foundation/specs/type-registry/spec.md
+
+types:
+  - name: Decision
+    directory: decisions
+    singular: decision
+    tool: store_decision
+    template: templates/decision.md
+    extraction_hint: "Architectural or design choices that were made."
+    immutable: false
+    project_attached: true
+
+  - name: Fact
+    directory: facts
+    singular: fact
+    tool: store_fact
+    template: templates/fact.md
+    extraction_hint: "Stable, verifiable statements about the project (versions, conventions, constraints)."
+    immutable: false
+    project_attached: true
+
+  - name: Learning
+    directory: learnings
+    singular: learning
+    tool: store_learning
+    template: templates/learning.md
+    extraction_hint: "Non-obvious lessons, debugging insights, or solutions found."
+    immutable: false
+    project_attached: true
+
+  - name: Convention
+    directory: conventions
+    singular: convention
+    tool: store_convention
+    template: templates/convention.md
+    extraction_hint: "Style rules, naming patterns, and coding conventions."
+    immutable: false
+    project_attached: true
+
+  - name: Profile
+    directory: profiles
+    singular: profile
+    tool: store_profile
+    template: templates/profile.md
+    extraction_hint: "User profile or tech stack information for a project."
+    immutable: false
+    project_attached: true
+
+  - name: Idea
+    directory: ideas
+    singular: idea
+    tool: store_idea
+    template: templates/idea.md
+    extraction_hint: "Propuesta no validada, hipótesis o alternativa considerada (no implementada aún)."
+    immutable: false
+    project_attached: true
+
+  - name: Context
+    directory: contexts
+    singular: context
+    tool: store_context
+    template: templates/context.md
+    extraction_hint: "Estado situacional, constraints temporales, entorno o presunciones en el momento."
+    immutable: false
+    project_attached: true
+
+  - name: Source
+    directory: raw
+    singular: source
+    tool: store_source
+    template: templates/source.md
+    extraction_hint: null
+    immutable: true
+    project_attached: false
