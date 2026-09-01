@@ -65,6 +65,48 @@ dsh plugin --profile demo add @dsh-memory/memory-mcp @dsh-memory/memory-auto
 dsh --profile demo --dump-config | grep -A2 memory
 ```
 
+## Usage & interaction commands
+
+Once installed, the agent can read and write the vault through the
+`mcp__memory__*` tools — just ask it in the chat:
+
+| You say | Tool the agent uses |
+|---|---|
+| "search your memory for `<topic>`" | `mcp__memory__search_memory` |
+| "remember this: `<fact/decision>`" | `mcp__memory__store_decision` / `store_fact` / … |
+| "export everything you know about `<project>`" | `mcp__memory__export_memories` |
+| "summarize my profile" | `mcp__memory__get_profile` |
+
+**Automatic capture** (`memory-auto`): git commits, compactions and session
+ends trigger digests; idle checkpoints capture when there is activity. Digests
+log as `[memory-auto] …` lines in the harness console, and writes land under
+`<vault>/projects/<project>/<type>/` (Markdown) + the SQLite FTS5 index.
+
+**Verify the installation and the stored memory:**
+
+```sh
+# composed config shows both bundles with the resolved paths
+dsh --profile web --dump-config | grep -A8 memory
+
+# what the vault holds (default vault: ~/.dsh/memory-vault)
+ls ~/.dsh/memory-vault/projects/               # per-project OKF entries
+grep -i "digest" ~/.dsh/memory-vault/log.md    # digest markers
+
+# talk to the vault MCP server directly (standalone smoke test)
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"cli","version":"0"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}' \
+  | MEMORY_PATH=$HOME/.dsh/memory-vault uv run --directory memory-vault-server python server.py
+```
+
+**Run a second harness instance on another port** (for testing without touching
+your main session):
+
+```sh
+pnpm dsh web --port 3090
+```
+
 ## Memory stack
 
 The plugins work on an OKF vault (`memory-vault/` in this repo, or your own).
