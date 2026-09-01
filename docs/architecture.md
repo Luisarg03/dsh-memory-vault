@@ -12,15 +12,13 @@ declares a `dsh.bundle` manifest and mounts with
 <sub>[Interactive version](diagrams/stack.html)</sub>
 
 ```
-DeepSeek Harness (web / headless)  ← plugins mounted in the profile process
+DeepSeek Harness (web / headless)  ← plugins and services in the profile process
 ├── memory-mcp        @dsh-memory/memory-mcp   MCP stdio client (spawns the server via uv)
-├── memory-auto       @dsh-memory/memory-auto  session hooks: idle · commit · compaction · end
-│        │ spawn · uv run
+├── memory-auto       @dsh-memory/memory-auto  session hooks + in-process digest
+├── ctx.llm           dsh-llm service          provider deepseek-official → DeepSeek API
+│        │ store_* via MCP stdio
 │        ▼
-│   digest_session.py          transcript → OKF entries via an external LLM CLI
-│        │
-│        ▼
-└── memory-vault-server        Python MCP server · 10 tools
+└── memory-vault-server        Python MCP server · 10 tools (spawned via uv run)
          │ SQLite FTS5 + Markdown
          ▼
     memory-vault                OKF bundle: templates · type-registry · tag-vocabulary
@@ -32,9 +30,12 @@ DeepSeek Harness (web / headless)  ← plugins mounted in the profile process
   server over stdio (JSON-RPC). Tool calls reach the server, which reads and
   writes the vault.
 - **memory-auto** watches the session event stream and triggers checkpoints
-  (idle, git commit, compaction, session end). It spawns the digest script
-  through `uv run` and delegates LLM extraction to the `opencode` CLI — the
-  plugin holds no credentials of its own.
+  (idle, git commit, compaction, session end). The post-session digest runs
+  **in-process**: extraction uses the harness's own LLM service
+  (`ctx.llm.stream`, provider/model configurable, `deepseek-official` by
+  default — the same credentials DSH is configured with), and the resulting
+  OKF entries are written through the vault server's `store_*` tools over
+  stdio. No external CLI and no stored credentials.
 - **memory-vault-server** (`memory-vault-server/`) is a Python MCP server:
   SQLite (WAL + FTS5) as a derived search index over Markdown OKF files, which
   remain the source of truth. It exposes 10 tools: `search_memory`,
@@ -52,10 +53,13 @@ DeepSeek Harness (web / headless)  ← plugins mounted in the profile process
 
 Session events are captured by `memory-auto` at checkpoints. When the gate
 passes (activity recorded and transcript ≥ `minTranscriptChars`), the plugin
-spawns `digest_session.py` via `uv run`; the digest asks the `opencode` CLI to
-extract notable decisions, facts and learnings, reviews the candidates, and
-writes OKF entries into the vault. SQLite FTS5 is a derived index, rebuilt
-from the Markdown whenever needed.
+extracts entries **in-process**: it streams the extraction prompt through
+`ctx.llm` (the harness's own LLM service, provider/model configurable,
+`deepseek-official` by default), repairs and validates the JSON result, and
+writes the entries through the vault server's `store_*` tools over MCP stdio —
+the same write path the agent's checkpoint flow uses, keeping Markdown and the
+SQLite FTS5 index in sync. Retries are bounded; a failed digest is logged and
+never takes the agent down.
 
 ## MCP tool call
 
@@ -85,12 +89,13 @@ All paths are environment-driven, never hardcoded:
 
 | Variable | Used by | Default |
 |---|---|---|
-| `DSH_MEMORY_PATH` | server (`MEMORY_PATH`), memory-auto, digest | `./memory-vault` |
-| `DSH_MEMORY_SERVER_DIR` | memory-mcp (server directory) | `./memory-vault-server` |
-| `DSH_DIGEST_SCRIPT` | memory-auto (digest script) | `./scripts/digest_session.py` |
-| `DSH_DIGEST_LOG` | memory-auto (spawn log) | `<tmpdir>/dsh-digest-spawn.log` |
+| `DSH_MEMORY_PATH` | server (`MEMORY_PATH`), memory-auto | `./memory-vault` |
+| `DSH_MEMORY_SERVER_DIR` | memory-mcp and memory-auto (server directory) | `./memory-vault-server` |
 
-Requires `uv` on PATH (the server and the digest run through `uv run`).
+Plugin-level config (patch layer): `provider` (`deepseek-official`),
+`model` (`deepseek-v4-flash`), `maxTokens`, `minTranscriptChars`, `enabled`.
+
+Requires `uv` on PATH (the server and the plugins run it via `uv run`).
 
 ## Layer order
 

@@ -1,5 +1,5 @@
 # dev overlay — memory-mcp + memory-auto
-# overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR, DSH_DIGEST_SCRIPT
+# overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR
 - insert:
     - id: memory-mcp
       name: '@deepseek-ai/dsh-mcp-client'
@@ -16,5 +16,7 @@
       name: !!js process.cwd() + '/packages/memory-auto/src/index.ts'
       config:
         memoryPath: !!js process.env.DSH_MEMORY_PATH ?? process.cwd() + '/memory-vault'
-        digestScript: !!js process.env.DSH_DIGEST_SCRIPT ?? process.cwd() + '/scripts/digest_session.py'
+        serverDir: !!js process.env.DSH_MEMORY_SERVER_DIR ?? process.cwd() + '/memory-vault-server'
+        provider: deepseek-official
+        model: deepseek-v4-flash
         enabled: true

@@ -170,6 +170,184 @@ export function buildCommitCheckpointPrompt(state: SessionState): string {
   ].join("\n");
 }
 
+// ── In-process session digest (ctx.llm) ──────────────────────────────────
+
+/**
+ * Entry types the vault's MCP server can store via `store_*` tools. The
+ * extraction prompt is restricted to these so every produced entry has a
+ * write path (no `idea`/`context`/`source` — those have no store tool).
+ */
+export const EXTRACTABLE_TYPES = ['decision', 'fact', 'learning', 'convention'] as const
+export type ExtractableType = (typeof EXTRACTABLE_TYPES)[number]
+
+/** One validated OKF entry ready to be stored through the vault server. */
+export interface ValidEntry {
+  entry_type: ExtractableType
+  content: string
+  description: string
+  tags: string[]
+  confidence: number
+  openspec_change_id: string | null
+}
+
+/** Optional vault context files to embed in the extraction prompt. */
+export interface DigestContextFiles {
+  criticalFacts?: string
+  claude?: string
+}
+
+/**
+ * Build the system + user messages for the in-process extraction call.
+ * The system part instructs the model to return a JSON array restricted to
+ * EXTRACTABLE_TYPES; the user part carries the transcript.
+ */
+export function buildExtractionPrompt(
+  project: string,
+  transcript: string,
+  contextFiles: DigestContextFiles = {},
+): { system: string; user: string } {
+  const sysParts: string[] = [
+    'You are an assistant that extracts durable knowledge from a session transcript.',
+  ]
+  if (contextFiles.criticalFacts?.trim()) {
+    sysParts.push(`Always-loaded context: CRITICAL_FACTS.md\n${contextFiles.criticalFacts.trim()}`)
+  }
+  if (contextFiles.claude?.trim()) {
+    sysParts.push(`Always-loaded context: _CLAUDE.md\n${contextFiles.claude.trim()}`)
+  }
+  sysParts.push(
+    `For the transcript of project \`${project}\`, identify:`,
+    '- **Decisions**: architectural or design choices that were made.',
+    '- **Facts**: stable, verifiable statements about the project (versions, conventions, constraints).',
+    '- **Learnings**: non-obvious lessons, debugging insights, or solutions found.',
+    '- **Conventions**: style rules, naming patterns, coding conventions agreed.',
+    '',
+    'Return a JSON array. Each element must have exactly:',
+    '  - "entry_type": one of "decision" | "fact" | "learning" | "convention"',
+    '  - "content": a single-paragraph statement (no headings, no lists)',
+    '  - "description": a one-sentence summary of `content` (queryable)',
+    '  - "tags": an array of lowercase-kebab tags (never empty if possible, at least 1 like architecture/python/testing)',
+    '  - "confidence": a number 0.0-1.0',
+    '  - "openspec_change_id": (optional) the change slug if the transcript names it',
+    '',
+    'Rules:',
+    '- Skip trivial exchanges (greetings, "ok", "thanks", or anything with no project knowledge).',
+    '- Prefer fewer, higher-signal entries over many weak ones.',
+    '- Do not include anything not present in the transcript.',
+    '',
+    'Return only the JSON array. No prose, no markdown fences.',
+  )
+  return {
+    system: sysParts.join('\n'),
+    user: `Project: ${project}\n\nTranscript:\n---\n${transcript}\n---`,
+  }
+}
+
+/**
+ * Split an oversized transcript into overlapping chunks (mirrors the legacy
+ * digest script: 25k chars per chunk, 1k overlap, at most `cap` chunks).
+ */
+export function chunkTranscript(text: string, maxLen = 50_000, chunkSize = 25_000, overlap = 1_000, cap = 3): string[] {
+  if (text.length <= maxLen) return [text]
+  const chunks: string[] = []
+  let i = 0
+  while (i < text.length) {
+    chunks.push(text.slice(i, i + chunkSize))
+    i += chunkSize - overlap
+    if (chunks.length >= cap) break
+  }
+  return chunks
+}
+
+/** Best-effort repair of common LLM JSON output; returns parsed value or null. */
+export function repairJson(text: string): unknown {
+  const s = text.trim()
+  // Strip code fences: ```json ... ```
+  const fenced = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+  // Trailing commas: `,]` / `,}` -> `]` / `}`
+  const noTrailing = fenced.replace(/,(\s*[\]}])/g, '$1')
+  const candidates = [s, fenced, noTrailing]
+  // Single-quote to double-quote conversion only when no double quotes exist.
+  if (noTrailing.includes("'") && !noTrailing.includes('"')) {
+    candidates.push(convertSingleQuotes(noTrailing))
+  }
+  for (const c of candidates) {
+    try {
+      return JSON.parse(c)
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null
+}
+
+function convertSingleQuotes(text: string): string {
+  let out = ''
+  let inString = false
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (inString && ch === '\\') {
+      if (i + 1 < text.length && text[i + 1] === "'") {
+        out += "'"
+        i += 2
+        continue
+      }
+      out += ch
+      if (i + 1 < text.length) {
+        out += text[i + 1]
+        i += 2
+        continue
+      }
+      i += 1
+      continue
+    }
+    if (ch === "'") {
+      inString = !inString
+      out += '"'
+      i += 1
+      continue
+    }
+    out += ch
+    i += 1
+  }
+  return out
+}
+
+/**
+ * Validate a parsed extraction payload into OKF entries. Unknown types,
+ * empty content and malformed values are dropped; tags and confidence are
+ * normalized. Returns the valid entries (possibly empty).
+ */
+export function validateEntries(payload: unknown): ValidEntry[] {
+  if (!Array.isArray(payload)) return []
+  const valid: ValidEntry[] = []
+  for (const item of payload) {
+    if (typeof item !== 'object' || item === null) continue
+    const raw = item as Record<string, unknown>
+    const entryType = raw.entry_type
+    if (typeof entryType !== 'string' || !(EXTRACTABLE_TYPES as readonly string[]).includes(entryType)) continue
+    const content = typeof raw.content === 'string' ? raw.content.trim() : ''
+    if (!content) continue
+    const tags = Array.isArray(raw.tags) ? raw.tags.filter((t): t is string => typeof t === 'string' && t.length > 0) : []
+    let confidence = 1
+    if (typeof raw.confidence === 'number' && Number.isFinite(raw.confidence)) {
+      confidence = Math.max(0, Math.min(1, raw.confidence))
+    }
+    const description = typeof raw.description === 'string' ? raw.description.trim() : ''
+    const changeId = typeof raw.openspec_change_id === 'string' && raw.openspec_change_id ? raw.openspec_change_id : null
+    valid.push({
+      entry_type: entryType as ExtractableType,
+      content,
+      description,
+      tags,
+      confidence,
+      openspec_change_id: changeId,
+    })
+  }
+  return valid
+}
+
 // The full hook wiring is exposed for testing; the actual OpenCode integration
 // is done in `register.ts` (the entry point the OpenCode runtime loads via
 // package.json "main"). This module intentionally has no default export:

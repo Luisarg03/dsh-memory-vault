@@ -7,36 +7,33 @@
     "quality_profile": "showcase",
     "viewBox": [1320, 640],
     "views": [
-      { "id": "main-path", "label": "Flujo principal", "focus": ["session", "auto", "digest", "opencode", "vault-md"], "note": "El transcript de una sesión se convierte en entradas OKF." },
+      { "id": "main-path", "label": "Flujo principal", "focus": ["session", "auto", "llm", "vault-md"], "note": "El transcript de una sesión se convierte en entradas OKF con el LLM del propio harness." },
       { "id": "index-path", "label": "Índice derivado", "focus": ["vault-md", "vault-db"], "note": "SQLite FTS5 se reconstruye desde el markdown." }
     ]
   },
   "stages": [
     { "label": "Fuente" },
     { "label": "Captura" },
-    { "label": "Digest" },
     { "label": "Extracción" },
     { "label": "Almacenamiento" }
   ],
   "nodes": [
-    { "id": "session", "type": "external", "label": "Sesión DSH", "sublabel": "eventos · transcript", "stage": 0, "row": 0, "tag": "usuario + agente", "width": 140 },
-    { "id": "auto", "type": "backend", "label": "memory-auto", "sublabel": "idle · commit · compaction · fin", "stage": 1, "row": 0, "tag": "hook de sesión", "width": 170 },
-    { "id": "digest", "type": "backend", "label": "digest_session.py", "sublabel": "transcript → entradas candidatas", "stage": 2, "row": 0, "tag": "uv run", "width": 160 },
-    { "id": "opencode", "type": "external", "label": "opencode CLI", "sublabel": "LLM · decide qué es notable", "stage": 3, "row": 1, "tag": "sin credenciales propias", "width": 170 },
-    { "id": "vault-md", "type": "database", "label": "Vault OKF", "sublabel": "markdown · projects/ · raw/", "stage": 4, "row": 0, "tag": "fuente de verdad", "width": 160 },
-    { "id": "vault-db", "type": "database", "label": "Índice SQLite", "sublabel": "FTS5 · rebuildable", "stage": 4, "row": 1, "tag": "búsqueda", "width": 170 }
+    { "id": "session", "type": "external", "label": "Sesión DSH", "sublabel": "eventos · transcript", "stage": 0, "row": 0, "tag": "usuario + agente", "width": 150 },
+    { "id": "auto", "type": "backend", "label": "memory-auto", "sublabel": "checkpoints + digest in-process", "stage": 1, "row": 0, "tag": "hook de sesión", "width": 170 },
+    { "id": "llm", "type": "backend", "label": "ctx.llm (dsh-llm)", "sublabel": "provider deepseek-official", "stage": 2, "row": 1, "tag": "sin CLIs externos", "width": 170 },
+    { "id": "vault-md", "type": "database", "label": "Vault OKF", "sublabel": "markdown · projects/ · raw/", "stage": 3, "row": 0, "tag": "fuente de verdad", "width": 170 },
+    { "id": "vault-db", "type": "database", "label": "Índice SQLite", "sublabel": "FTS5 · rebuildable", "stage": 3, "row": 1, "tag": "búsqueda", "width": 170 }
   ],
   "flows": [
-    { "from": "session", "to": "auto", "label": "eventos de sesión", "classification": "hook", "variant": "emphasis", "route": "straight", "labelDy": 57 },
-    { "from": "auto", "to": "digest", "label": "spawn · transcript", "classification": "uv run", "variant": "emphasis", "route": "vertical-channel", "labelDy": 57 },
-    { "from": "digest", "to": "opencode", "label": "consulta LLM", "classification": "extracción", "variant": "dashed", "fromSide": "bottom", "via": [[530, 220], [630, 220], [630, 271], [650, 271]], "labelAt": [585, 245] },
-    { "from": "opencode", "to": "digest", "label": "entradas candidatas", "classification": "revisión", "variant": "dashed", "fromSide": "bottom", "toSide": "bottom", "via": [[745, 340], [530, 340], [530, 186]], "labelAt": [640, 352] },
-    { "from": "digest", "to": "vault-md", "label": "entradas OKF", "classification": "markdown", "variant": "emphasis", "route": "straight" },
+    { "from": "session", "to": "auto", "label": "eventos de sesión", "classification": "hook", "variant": "emphasis", "route": "straight", "labelDy": -50 },
+    { "from": "auto", "to": "llm", "label": "extracción · stream", "classification": "ctx.llm", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "via": [[315, 220], [530, 220], [530, 242]], "labelAt": [435, 205] },
+    { "from": "llm", "to": "auto", "label": "entradas JSON", "classification": "revisión", "variant": "dashed", "fromSide": "bottom", "toSide": "left", "via": [[530, 330], [200, 330], [200, 157], [255, 157]], "labelAt": [430, 348] },
+    { "from": "auto", "to": "vault-md", "label": "store_* vía MCP stdio", "classification": "server", "variant": "emphasis", "route": "straight", "labelDy": -42 },
     { "from": "vault-md", "to": "vault-db", "label": "índice derivado", "classification": "reindex", "variant": "dashed", "route": "vertical-channel" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Captura", "items": ["checkpoints automáticos en idle, commit, compaction y fin de sesión", "transcript mínimo configurable (minTranscriptChars)"] },
-    { "dot": "emerald", "title": "Extracción", "items": ["el digest delega en opencode CLI, sin credenciales propias", "las entradas candidatas se revisan antes de escribir"] },
+    { "dot": "cyan", "title": "Captura", "items": ["checkpoints en idle, commit, compaction y fin de sesión", "transcript mínimo configurable (minTranscriptChars)"] },
+    { "dot": "emerald", "title": "Extracción", "items": ["el digest usa el LLM del propio harness (ctx.llm.stream)", "provider y modelo configurables (deepseek-official por defecto)"] },
     { "dot": "violet", "title": "Almacenamiento", "items": ["markdown OKF como fuente de verdad", "SQLite FTS5 como índice derivado, rebuildable"] }
   ]
 }

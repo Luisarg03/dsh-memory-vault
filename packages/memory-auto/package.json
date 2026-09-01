@@ -14,5 +14,8 @@
     "@deepseek-ai/cordis": "4.0.1",
     "@deepseek-ai/schemastery": "3.18.1"
   },
-  "devDependencies": { "typescript": "^5.9.2", "tsdown": "^0.15.6", "vitest": "^3.2.7" }
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0"
+  },
+  "devDependencies": { "typescript": "^5.9.2", "tsdown": "^0.15.6", "vitest": "^3.2.7", "@deepseek-ai/dsh-llm": "0.1.0-rc.7" }
 }

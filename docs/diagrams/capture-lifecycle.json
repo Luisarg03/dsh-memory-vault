@@ -20,7 +20,7 @@
     { "id": "active", "type": "active", "label": "Sesión activa", "sublabel": "idle · commit · compaction · fin", "lane": "main", "col": 1, "step": "02", "tag": "trabajo", "width": 140 },
     { "id": "gate", "type": "decision", "label": "¿Digest?", "sublabel": "actividad · transcript mínimo", "lane": "main", "col": 2, "step": "03", "tag": "gate", "width": 140 },
     { "id": "checkpoint", "type": "active", "label": "Checkpoint", "sublabel": "captura del estado actual", "lane": "main", "col": 3, "tag": "disparo", "width": 140 },
-    { "id": "queued", "type": "waiting", "label": "Digest en cola", "sublabel": "spawn digest_session.py", "lane": "main", "col": 4, "tag": "uv run", "width": 140 },
+    { "id": "queued", "type": "waiting", "label": "Digest en cola", "sublabel": "extracción in-process (ctx.llm)", "lane": "main", "col": 4, "tag": "ctx.llm", "width": 140 },
     { "id": "digested", "type": "success", "label": "Entradas OKF", "sublabel": "escritas en el vault", "lane": "side", "col": 0, "step": "04", "tag": "listo" },
     { "id": "ended", "type": "success", "label": "Sesión terminada", "sublabel": "digest post-sesión", "lane": "terminal", "col": 0, "step": "05", "tag": "cierre" }
   ],

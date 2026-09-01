@@ -20,7 +20,7 @@ stack: persistent OKF memory for [DeepSeek Harness](https://deepseek-harness.git
 | `@dsh-memory/memory-auto` | Cordis bundle: auto-captures session memory at idle/commit/compaction/end checkpoints | [packages/memory-auto/README.md](../packages/memory-auto/README.md) |
 | `memory-vault-server/` | Python MCP server: SQLite FTS5 + Markdown OKF | [architecture.md](architecture.md#memory-vault-server) |
 | `memory-vault/` | Starter vault: OKF templates + type registry + tag vocabulary | [memory-vault/README.md](../memory-vault/README.md) |
-| `scripts/digest_session.py` | Post-session transcript digest via an external LLM CLI | [architecture.md](architecture.md#session-digest) |
+| `scripts/digest_session.py` | Optional standalone digest CLI (not used by the plugins) | — |
 
 ## Design notes
 

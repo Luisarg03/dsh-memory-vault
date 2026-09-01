@@ -10,23 +10,32 @@ import {
   buildCommitCheckpointPrompt,
   type SessionState,
 } from './pure.js'
-import { digestSessionDSM } from './digest.js'
+import { digestSessionDSM, type DigestConfig } from './digest.js'
 
 export const name = 'memory-auto'
 
 export interface Config {
   memoryPath: string
-  digestScript: string
+  serverDir: string
+  provider: string
+  model: string
+  maxTokens: number
   minTranscriptChars: number
   enabled: boolean
 }
 
 export const Config: Schema<Config> = Schema.object({
   memoryPath: Schema.string().default(process.env.DSH_MEMORY_PATH ?? './memory-vault'),
-  digestScript: Schema.string().default(process.env.DSH_DIGEST_SCRIPT ?? './scripts/digest_session.py'),
+  serverDir: Schema.string().default(process.env.DSH_MEMORY_SERVER_DIR ?? './memory-vault-server'),
+  provider: Schema.string().default('deepseek-official'),
+  model: Schema.string().default('deepseek-v4-flash'),
+  maxTokens: Schema.number().default(2048),
   minTranscriptChars: Schema.number().default(200),
   enabled: Schema.boolean().default(true),
 })
+
+/** Requires the harness LLM service: extraction runs in-process via ctx.llm. */
+export const inject = ['llm']
 
 // DSH session shape minimal
 type DSHEvt = any
@@ -36,6 +45,15 @@ export function apply(ctx: Context, config: Config) {
   if (!config.enabled) {
     console.log('[memory-auto] disabled via config')
     return
+  }
+
+  const digestConfig: DigestConfig = {
+    memoryPath: config.memoryPath,
+    serverDir: config.serverDir,
+    provider: config.provider,
+    model: config.model,
+    maxTokens: config.maxTokens,
+    minTranscriptChars: config.minTranscriptChars,
   }
 
   const states = new Map<string, SessionState>()
@@ -96,28 +114,25 @@ export function apply(ctx: Context, config: Config) {
     const dir = sessionDirs.get(sid) ?? ''
     const proj = await projectFor(dir)
     const evts: DSHEvt[] = (session as any)?.events ?? []
-    await digestSessionDSM(sid, dir, proj, evts, config.digestScript, config.memoryPath)
+    await digestSessionDSM(ctx, digestConfig, sid, dir, proj, evts)
   })
 
-  // agent/status idle -> similar to session.idle
+  // agent/status idle -> in-session capture gate
   ctx.on('agent/status', async (payload: any) => {
     const agent = payload?.agent
     const status = payload?.status ?? payload?.agentStatus
     if (status !== 'idle') return
-    // agent.status payload may contain sessionId? Try to find sid via agent.id
     const sid: string | undefined = agent?.sessionId ?? payload?.sessionId ?? agent?.id
     if (!sid) return
     const st = states.get(sid)
     if (!st) return
     const text = idleCheckpoint(st, summary(sid))
     if (text) {
-      console.log(`[memory-auto] idle checkpoint spawn for ${sid}`)
+      console.log(`[memory-auto] idle checkpoint digest for ${sid}`)
       const dir = sessionDirs.get(sid) ?? ''
       const proj = await projectFor(dir)
-      // need events: try to get session from some store? fallback to empty
-      // For now use activities as transcript proxy
       const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
-      await digestSessionDSM(sid, dir, proj, fakeEvents, config.digestScript, config.memoryPath)
+      await digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
     }
   })
 
@@ -128,7 +143,7 @@ export function apply(ctx: Context, config: Config) {
     const t = event?.type ?? ''
     const d = event?.data ?? {}
 
-    // compaction/start -> checkpoint injection (log for now, actual injection via agent/pre-step)
+    // compaction/start -> checkpoint injection (delivered on the next pre-step)
     if (t === 'compaction/start') {
       const st = states.get(sid)
       if (!st) return
@@ -167,16 +182,14 @@ export function apply(ctx: Context, config: Config) {
     }
   })
 
-  // agent/pre-step Waterfall -> deliver queued checkpoint (opencode messages.transform equivalent)
-  // In DSH, agent/pre-step is Waterfall, must call next()
+  // agent/pre-step Waterfall -> deliver queued checkpoint
   ctx.on('agent/pre-step', async (payload: any, next: any) => {
     const sid: string | undefined = payload?.agent?.sessionId ?? payload?.sessionId
     if (sid) {
       const q = queued.get(sid)
       if (q) {
         queued.delete(sid)
-        // payload has messages? Append checkpoint as user context
-        // Best effort: if payload.context is array, push
+        // Best effort: append the checkpoint as user context
         if (Array.isArray(payload?.context)) payload.context.push(q)
         else if (Array.isArray(payload?.messages)) payload.messages.push({ role: 'user', content: q })
         else console.log(`[memory-auto] deliver queued checkpoint for ${sid}`)
@@ -185,21 +198,21 @@ export function apply(ctx: Context, config: Config) {
     return next()
   })
 
-  // dispose -> batch digest remaining sessions (like opencode dispose)
+  // dispose -> batch digest remaining sessions
   ctx.effect(() => {
     return () => {
       console.log(`[memory-auto] dispose batch ${sessionDirs.size} sessions`)
-      // fire-and-forget digest for each remaining
+      // fire-and-forget digest for each remaining session
       for (const [sid, dir] of sessionDirs) {
         const st = states.get(sid)
         if (!st?.hasActivity) continue
         projectFor(dir).then((proj) => {
           const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
-          digestSessionDSM(sid, dir, proj, fakeEvents, config.digestScript, config.memoryPath)
+          void digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
         })
       }
     }
   })
 
-  console.log('[memory-auto] active memoryPath=' + config.memoryPath)
+  console.log(`[memory-auto] active memoryPath=${config.memoryPath} llm=${config.provider}/${config.model}`)
 }

@@ -5,12 +5,16 @@ import { join } from 'node:path'
 import {
   buildCheckpointPrompt,
   buildCommitCheckpointPrompt,
+  buildExtractionPrompt,
+  chunkTranscript,
   compactingCheckpoint,
   createSessionState,
   idleCheckpoint,
   isGitCommit,
   isSupportedVersion,
+  repairJson,
   resolveProjectName,
+  validateEntries,
   type SessionState,
 } from '../src/pure.js'
 
@@ -148,5 +152,93 @@ describe('resolveProjectName', () => {
   it('falls back to the directory basename', async () => {
     const d = fixture()
     expect(await resolveProjectName(d)).toBe(d.split('/').pop())
+  })
+})
+
+describe('buildExtractionPrompt', () => {
+  it('names the project, embeds the transcript and restricts the entry types', () => {
+    const { system, user } = buildExtractionPrompt('dsh-memory-vault', 'we decided to use sqlite')
+    expect(system).toContain('`dsh-memory-vault`')
+    expect(system).toContain('"decision" | "fact" | "learning" | "convention"')
+    expect(system).toContain('JSON array')
+    expect(user).toContain('we decided to use sqlite')
+  })
+
+  it('embeds vault context files when provided', () => {
+    const { system } = buildExtractionPrompt('p', 't', {
+      criticalFacts: 'User: es-AR',
+      claude: 'vault map',
+    })
+    expect(system).toContain('CRITICAL_FACTS.md\nUser: es-AR')
+    expect(system).toContain('_CLAUDE.md\nvault map')
+  })
+})
+
+describe('chunkTranscript', () => {
+  it('returns a single chunk for short transcripts', () => {
+    expect(chunkTranscript('short')).toEqual(['short'])
+  })
+
+  it('splits oversized transcripts with overlap and a cap', () => {
+    const text = 'x'.repeat(60_000)
+    const chunks = chunkTranscript(text)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.length).toBeLessThanOrEqual(3)
+    expect(chunks[0].length).toBe(25_000)
+  })
+})
+
+describe('repairJson', () => {
+  it('parses plain JSON', () => {
+    expect(repairJson('[{"a":1}]')).toEqual([{ a: 1 }])
+  })
+
+  it('strips markdown fences', () => {
+    expect(repairJson('```json\n[{"a":1}]\n```')).toEqual([{ a: 1 }])
+  })
+
+  it('removes trailing commas', () => {
+    expect(repairJson('[{"a":1},]')).toEqual([{ a: 1 }])
+  })
+
+  it('converts single-quoted JSON when no double quotes exist', () => {
+    expect(repairJson("[{'entry_type': 'fact'}]")).toEqual([{ entry_type: 'fact' }])
+  })
+
+  it('returns null for unusable output', () => {
+    expect(repairJson('no json here')).toBeNull()
+  })
+})
+
+describe('validateEntries', () => {
+  it('accepts extractable types and normalizes fields', () => {
+    const entries = validateEntries([
+      { entry_type: 'fact', content: '  sqlite is the index  ', tags: ['sqlite', 42], confidence: 1.7, description: 'd' },
+      { entry_type: 'idea', content: 'dropped', tags: [] }, // no store tool -> dropped
+      { entry_type: 'fact', content: '   ' }, // empty -> dropped
+      'not-an-object',
+      null,
+    ])
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      entry_type: 'fact',
+      content: 'sqlite is the index',
+      tags: ['sqlite'],
+      confidence: 1,
+      description: 'd',
+    })
+  })
+
+  it('keeps openspec_change_id and clamps confidence', () => {
+    const entries = validateEntries([
+      { entry_type: 'decision', content: 'use uv', openspec_change_id: 'fix-memory-store', confidence: -2 },
+    ])
+    expect(entries[0].openspec_change_id).toBe('fix-memory-store')
+    expect(entries[0].confidence).toBe(0)
+  })
+
+  it('returns [] for non-arrays', () => {
+    expect(validateEntries({})).toEqual([])
+    expect(validateEntries(null)).toEqual([])
   })
 })

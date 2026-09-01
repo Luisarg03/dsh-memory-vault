@@ -29,7 +29,7 @@ and a vault starter with templates and a type registry.
 | `memory-auto` | Auto memory capture: session digest with commit/compaction checkpoints | `@dsh-memory/memory-auto` |
 | `memory-vault-server/` | Python MCP server: SQLite FTS5 + Markdown OKF | — |
 | `memory-vault/` | Vault starter: templates + type registry + tag vocabulary | — |
-| `scripts/digest_session.py` | Post-session digest: transcript → OKF entries via an LLM CLI | — |
+| `scripts/digest_session.py` | Optional standalone post-session digest (CLI, not used by the plugins) | — |
 
 ## Quickstart
 
@@ -68,8 +68,12 @@ dsh --profile demo --dump-config | grep -A2 memory
 ## Memory stack
 
 The plugins work on an OKF vault (`memory-vault/` in this repo, or your own).
-Requirements: `uv` installed; the digest (`scripts/digest_session.py`) delegates
-LLM extraction to the `opencode` CLI (no credentials stored by the plugin).
+Requirement: `uv` installed (the server and the plugins run it via `uv run`).
+
+The post-session digest runs **in-process** through the harness's own LLM
+service (`ctx.llm`, provider `deepseek-official` by default — configurable with
+`provider`/`model`), so the plugins need no external CLI and store no
+credentials: they use the same key DSH is configured with.
 
 Paths are resolved through **environment variables** (no hardcoded paths):
 
@@ -77,8 +81,6 @@ Paths are resolved through **environment variables** (no hardcoded paths):
 |---|---|---|
 | `DSH_MEMORY_PATH` | vault directory | `./memory-vault` |
 | `DSH_MEMORY_SERVER_DIR` | directory with `server.py` (MCP server) | `./memory-vault-server` |
-| `DSH_DIGEST_SCRIPT` | digest script path | `./scripts/digest_session.py` |
-| `DSH_DIGEST_LOG` | digest spawn log | `<tmpdir>/dsh-digest-spawn.log` |
 
 ```sh
 # run the MCP server standalone:
@@ -112,7 +114,7 @@ packages/memory-mcp/          # cordis bundle: MCP stdio client to the vault
 packages/memory-auto/         # cordis bundle: automatic session digest
 memory-vault-server/          # Python MCP server (SQLite + Markdown OKF)
 memory-vault/                 # vault starter (templates + type registry)
-scripts/digest_session.py     # post-session digest (LLM via opencode CLI)
+scripts/digest_session.py     # optional standalone digest CLI (not used by the plugins)
 examples/dev-memory.cordis.yml      # memory-mcp
 examples/dev-memory-auto.cordis.yml # memory-mcp + memory-auto
 ```
