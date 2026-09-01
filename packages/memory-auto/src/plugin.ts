@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { isAbsolute, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import {
@@ -25,8 +28,8 @@ export interface Config {
 }
 
 export const Config: Schema<Config> = Schema.object({
-  memoryPath: Schema.string().default(process.env.DSH_MEMORY_PATH ?? './memory-vault'),
-  serverDir: Schema.string().default(process.env.DSH_MEMORY_SERVER_DIR ?? './memory-vault-server'),
+  memoryPath: Schema.string().default(process.env.DSH_MEMORY_PATH ?? ''),
+  serverDir: Schema.string().default(process.env.DSH_MEMORY_SERVER_DIR ?? ''),
   provider: Schema.string().default('deepseek-official'),
   model: Schema.string().default('deepseek-v4-flash'),
   maxTokens: Schema.number().default(2048),
@@ -36,6 +39,22 @@ export const Config: Schema<Config> = Schema.object({
 
 /** Requires the harness LLM service: extraction runs in-process via ctx.llm. */
 export const inject = ['llm']
+
+/**
+ * Resolve the harness home the same way the harness does (`$DSH_HOME`, or
+ * `~/.dsh`). Paths must never depend on the launch cwd: DSH does not chdir.
+ */
+function dshHome(): string {
+  const env = process.env.DSH_HOME?.trim()
+  return env && env.length > 0 ? env : join(homedir(), '.dsh')
+}
+
+/** Absolute paths stay; empty/relative values resolve under the harness home. */
+function resolveUnderHome(value: string, fallbackSegment: string): string {
+  const v = value.trim()
+  if (v.length === 0) return join(dshHome(), fallbackSegment)
+  return isAbsolute(v) ? v : join(dshHome(), v)
+}
 
 // DSH session shape minimal
 type DSHEvt = any
@@ -47,13 +66,25 @@ export function apply(ctx: Context, config: Config) {
     return
   }
 
+  const memoryPath = resolveUnderHome(config.memoryPath, 'memory-vault')
+  const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
   const digestConfig: DigestConfig = {
-    memoryPath: config.memoryPath,
-    serverDir: config.serverDir,
+    memoryPath,
+    serverDir,
     provider: config.provider,
     model: config.model,
     maxTokens: config.maxTokens,
     minTranscriptChars: config.minTranscriptChars,
+  }
+
+  if (!existsSync(serverDir)) {
+    console.warn(
+      `[memory-auto] vault server not found at ${serverDir} — the digest cannot write. ` +
+      'Install memory-vault-server there, or set DSH_MEMORY_SERVER_DIR / serverDir.',
+    )
+  }
+  if (!existsSync(memoryPath)) {
+    console.warn(`[memory-auto] vault not found at ${memoryPath} — it will be created on first use.`)
   }
 
   const states = new Map<string, SessionState>()
@@ -214,5 +245,5 @@ export function apply(ctx: Context, config: Config) {
     }
   })
 
-  console.log(`[memory-auto] active memoryPath=${config.memoryPath} llm=${config.provider}/${config.model}`)
+  console.log(`[memory-auto] active memoryPath=${memoryPath} serverDir=${serverDir} llm=${config.provider}/${config.model}`)
 }

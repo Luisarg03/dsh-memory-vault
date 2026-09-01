@@ -25,8 +25,8 @@ vault server directory (`memory-vault-server` in this repository).
 
 | Field | Purpose | Default |
 |---|---|---|
-| `memoryPath` | vault directory | `$DSH_MEMORY_PATH` or `./memory-vault` |
-| `serverDir` | directory containing the vault `server.py` | `$DSH_MEMORY_SERVER_DIR` or `./memory-vault-server` |
+| `memoryPath` | vault directory | `$DSH_MEMORY_PATH` or `$DSH_HOME/memory-vault` |
+| `serverDir` | directory containing the vault `server.py` | `$DSH_MEMORY_SERVER_DIR` or `$DSH_HOME/memory-vault-server` |
 | `provider` | LLM provider route (harness registry) | `deepseek-official` |
 | `model` | LLM model id | `deepseek-v4-flash` |
 | `maxTokens` | extraction output cap | `2048` |

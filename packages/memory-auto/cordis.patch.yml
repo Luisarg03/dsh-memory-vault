@@ -1,11 +1,13 @@
 # bundle @dsh-memory/memory-auto
 # overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR
+# defaults resuelven bajo el home del harness (cwd-independent):
+#   $DSH_HOME/memory-vault y $DSH_HOME/memory-vault-server (~/.dsh por defecto)
 - insert:
     - id: memory-auto
       name: '@dsh-memory/memory-auto'
       config:
-        memoryPath: !!js process.env.DSH_MEMORY_PATH ?? './memory-vault'
-        serverDir: !!js process.env.DSH_MEMORY_SERVER_DIR ?? './memory-vault-server'
+        memoryPath: !!js process.env.DSH_MEMORY_PATH ?? dshHomePath('memory-vault')
+        serverDir: !!js process.env.DSH_MEMORY_SERVER_DIR ?? dshHomePath('memory-vault-server')
         provider: deepseek-official
         model: deepseek-v4-flash
         maxTokens: 2048

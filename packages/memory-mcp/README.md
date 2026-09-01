@@ -20,11 +20,12 @@ Requires `uv` on PATH — the plugin spawns the server with `uv run`.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `DSH_MEMORY_SERVER_DIR` | directory containing `server.py` | `./memory-vault-server` |
-| `DSH_MEMORY_PATH` | vault directory (forwarded to the server as `MEMORY_PATH`) | `./memory-vault` |
+| `DSH_MEMORY_SERVER_DIR` | directory containing `server.py` | `$DSH_HOME/memory-vault-server` |
+| `DSH_MEMORY_PATH` | vault directory (forwarded to the server as `MEMORY_PATH`) | `$DSH_HOME/memory-vault` |
 
-The bundle ships no hardcoded paths: the `cordis.patch.yml` layer resolves both
-values from the environment at load time.
+The bundle ships no cwd-dependent paths: the `cordis.patch.yml` layer resolves both
+values from the environment, falling back to the harness home (`$DSH_HOME`, or
+`~/.dsh`) — DSH does not chdir, so launching from any directory works.
 
 ## Development
 

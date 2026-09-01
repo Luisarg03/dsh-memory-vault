@@ -75,12 +75,30 @@ service (`ctx.llm`, provider `deepseek-official` by default — configurable wit
 `provider`/`model`), so the plugins need no external CLI and store no
 credentials: they use the same key DSH is configured with.
 
-Paths are resolved through **environment variables** (no hardcoded paths):
+### Path resolution (cwd-independent)
+
+DSH does **not** chdir — the launch directory is irrelevant. Paths resolve in
+this order:
+
+1. Env vars (override everything): `DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`.
+2. Defaults under the **harness home**: `$DSH_HOME/memory-vault` and
+   `$DSH_HOME/memory-vault-server` (`~/.dsh` when `$DSH_HOME` is unset).
+3. Profile patch (`cordis.patch.yml`) or `--patch` overlay with explicit values.
+
+```sh
+# one-time setup: put the server and the vault starter under the harness home
+mkdir -p ~/.dsh
+ln -s "$PWD/memory-vault-server" ~/.dsh/memory-vault-server   # or copy it
+ln -s "$PWD/memory-vault" ~/.dsh/memory-vault                 # or copy it
+
+# then launch from anywhere — no env vars needed
+pnpm dsh web
+```
 
 | Env var | Used for | Default |
 |---|---|---|
-| `DSH_MEMORY_PATH` | vault directory | `./memory-vault` |
-| `DSH_MEMORY_SERVER_DIR` | directory with `server.py` (MCP server) | `./memory-vault-server` |
+| `DSH_MEMORY_PATH` | vault directory | `$DSH_HOME/memory-vault` |
+| `DSH_MEMORY_SERVER_DIR` | directory with `server.py` (MCP server) | `$DSH_HOME/memory-vault-server` |
 
 ```sh
 # run the MCP server standalone:

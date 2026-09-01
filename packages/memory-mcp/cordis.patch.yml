@@ -1,5 +1,7 @@
 # bundle @dsh-memory/memory-mcp — MCP stdio wrapper for memory-vault
 # overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR
+# defaults resuelven bajo el home del harness (cwd-independent):
+#   $DSH_HOME/memory-vault-server y $DSH_HOME/memory-vault (~/.dsh por defecto)
 - insert:
     - id: memory-mcp
       name: '@deepseek-ai/dsh-mcp-client'
@@ -7,8 +9,8 @@
         serverName: memory
         transport: stdio
         command: uv
-        args: [run, --directory, !!js process.env.DSH_MEMORY_SERVER_DIR ?? './memory-vault-server', python, server.py]
+        args: [run, --directory, !!js process.env.DSH_MEMORY_SERVER_DIR ?? dshHomePath('memory-vault-server'), python, server.py]
         env:
-          MEMORY_PATH: !!js process.env.DSH_MEMORY_PATH ?? './memory-vault'
+          MEMORY_PATH: !!js process.env.DSH_MEMORY_PATH ?? dshHomePath('memory-vault')
           UV_CACHE_DIR: /tmp/uv-cache
-        cwd: !!js process.cwd()
+        cwd: !!js process.env.DSH_MEMORY_SERVER_DIR ?? dshHomePath('memory-vault-server')
