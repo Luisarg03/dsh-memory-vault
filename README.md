@@ -1,5 +1,18 @@
 # dsh-memory-vault
 
+![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-dsh-4D6BFE?logo=deepseek)
+![Cordis 4.0.1](https://img.shields.io/badge/Cordis-4.0.1-6C5CE7)
+![pnpm 10.15.0](https://img.shields.io/badge/pnpm-10.15.0-F69220?logo=pnpm)
+![Node.js ≥22.18](https://img.shields.io/badge/Node.js-%E2%89%A522.18-339933?logo=nodedotjs)
+![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
+![Python ≥3.11](https://img.shields.io/badge/Python-%E2%89%A53.11-3776AB?logo=python)
+![uv 0.11](https://img.shields.io/badge/uv-0.11-0B0B0F?logo=uv)
+![MCP ≥1.2](https://img.shields.io/badge/MCP-%E2%89%A51.2-7C3AED)
+![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite)
+![Vitest 3.2](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest)
+![tsdown 0.15](https://img.shields.io/badge/tsdown-0.15-38BDF8)
+![oxlint 1.13](https://img.shields.io/badge/oxlint-1.13-FF6B6B)
+
 Persistent OKF memory for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/) (DSH):
 a Python MCP server (SQLite FTS5 + Markdown), two Cordis plugins (`memory-mcp`, `memory-auto`)
 and a vault starter with templates and a type registry.
