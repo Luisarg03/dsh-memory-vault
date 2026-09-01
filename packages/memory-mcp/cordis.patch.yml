@@ -1,0 +1,14 @@
+# bundle @dsh-memory/memory-mcp — MCP stdio wrapper for memory-vault
+# overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR
+- insert:
+    - id: memory-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: memory
+        transport: stdio
+        command: uv
+        args: [run, --directory, !!js process.env.DSH_MEMORY_SERVER_DIR ?? './memory-vault-server', python, server.py]
+        env:
+          MEMORY_PATH: !!js process.env.DSH_MEMORY_PATH ?? './memory-vault'
+          UV_CACHE_DIR: /tmp/uv-cache
+        cwd: !!js process.cwd()
