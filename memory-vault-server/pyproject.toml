@@ -1,0 +1,14 @@
+[project]
+name = "dsh-memory-vault-server"
+version = "0.1.0"
+description = "MCP server (SQLite FTS5 + markdown OKF) for dsh-memory-vault"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.2.0",
+    "PyYAML>=6.0",
+]
+
+# Virtual project: uv installs dependencies and runs scripts without
+# packaging this directory itself (no build backend needed).
+[tool.uv]
+package = false
