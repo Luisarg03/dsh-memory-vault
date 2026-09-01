@@ -17,9 +17,9 @@ Persistent OKF memory for [DeepSeek Harness](https://deepseek-harness.github.io/
 a Python MCP server (SQLite FTS5 + Markdown), two Cordis plugins (`memory-mcp`, `memory-auto`)
 and a vault starter with templates and a type registry.
 
-![Stack architecture](docs/diagrams/stack.png)
+![Stack architecture](docs/diagrams/stack.png?v=2)
 
-![Session digest pipeline](docs/diagrams/session-digest.png)
+![Session digest pipeline](docs/diagrams/session-digest.png?v=2)
 
 ## Components
 

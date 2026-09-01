@@ -8,7 +8,7 @@ declares a `dsh.bundle` manifest and mounts with
 
 ## Component overview
 
-![Stack architecture](diagrams/stack.png)
+![Stack architecture](diagrams/stack.png?v=2)
 <sub>[Interactive version](diagrams/stack.html)</sub>
 
 ```
@@ -48,7 +48,7 @@ DeepSeek Harness (web / headless)  ← plugins and services in the profile proce
 
 ## Session digest pipeline
 
-![Session digest pipeline](diagrams/session-digest.png)
+![Session digest pipeline](diagrams/session-digest.png?v=2)
 <sub>[Interactive version](diagrams/session-digest.html)</sub>
 
 Session events are captured by `memory-auto` at checkpoints. When the gate
@@ -63,7 +63,7 @@ never takes the agent down.
 
 ## MCP tool call
 
-![MCP tool call](diagrams/mcp-tool-call.png)
+![MCP tool call](diagrams/mcp-tool-call.png?v=2)
 <sub>[Interactive version](diagrams/mcp-tool-call.html)</sub>
 
 The agent issues `tools/call`; `memory-mcp` forwards JSON-RPC over stdio to
@@ -73,7 +73,7 @@ never takes the agent down.
 
 ## Per-session capture lifecycle
 
-![Capture lifecycle](diagrams/capture-lifecycle.png)
+![Capture lifecycle](diagrams/capture-lifecycle.png?v=2)
 <sub>[Interactive version](diagrams/capture-lifecycle.html)</sub>
 
 Sessions are registered on creation; the capture rail runs
