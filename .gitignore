@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+
+# build outputs
+lib/
+dist/
+*.tsbuildinfo
+*.tgz
+
+# local env
+.env
+.dsh-test-home/
+.pnpm-store/
+.tmp/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os
+.DS_Store
+
+# ---- datos privados del vault (no se publican) ----
+memory-vault/logs/
+memory-vault/tool-calls.log
+memory-vault/index.md
+memory-vault/log.md
+memory-vault/_CLAUDE.md
+memory-vault/CRITICAL_FACTS.md
+memory-vault/.obsidian/
+memory-vault/projects/
+memory-vault/raw/
+memory-vault/memory.db
+memory-vault/memory.db-wal
+memory-vault/memory.db-shm
+
+# ---- backups y notas personales ----
+memory-backup/
+
+# notas personales dentro de docs/ (el resto de docs/ es público)
+docs/deprecation-opencode.md
+docs/memory-quality-baseline.md
+
+# evidencia de visual-check de archify (contact sheets + sidecars)
+docs/diagrams/*.visual-check.*
+
+# scratch: clon de awesome-dsh-plugin para preparar el PR
+.scratch-awesome/

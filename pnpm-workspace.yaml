@@ -1,0 +1,11 @@
+packages:
+  - "packages/*"
+
+linkWorkspacePackages: true
+
+# pnpm 10 strictDepBuilds: lista explícita
+allowBuilds: {}
+
+overrides:
+  "@deepseek-ai/cordis": "4.0.1"
+  "@deepseek-ai/schemastery": "3.18.1"
