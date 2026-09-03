@@ -13,8 +13,8 @@ declares a `dsh.bundle` manifest and mounts with
 
 ```
 DeepSeek Harness (web / headless)  ← plugins and services in the profile process
-├── memory-mcp        @dsh-memory/memory-mcp   MCP stdio client (spawns the server via uv)
-├── memory-auto       @dsh-memory/memory-auto  session hooks + in-process digest
+├── memory-mcp        @luisarg/memory-mcp   MCP stdio client (spawns the server via uv)
+├── memory-auto       @luisarg/memory-auto  session hooks + in-process digest
 ├── ctx.llm           dsh-llm service          provider deepseek-official → DeepSeek API
 │        │ store_* via MCP stdio
 │        ▼

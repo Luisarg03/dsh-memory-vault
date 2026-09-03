@@ -1,4 +1,4 @@
-# bundle @dsh-memory/memory-mcp — MCP stdio wrapper for memory-vault
+# bundle @luisarg/memory-mcp — MCP stdio wrapper for memory-vault
 # overrides vía env: DSH_MEMORY_PATH, DSH_MEMORY_SERVER_DIR
 # defaults resuelven bajo el home del harness (cwd-independent):
 #   $DSH_HOME/memory-vault-server y $DSH_HOME/memory-vault (~/.dsh por defecto)

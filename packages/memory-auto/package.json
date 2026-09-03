@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-memory/memory-auto",
+  "name": "@luisarg/memory-auto",
   "version": "0.1.0",
   "type": "module",
   "description": "Auto-captura memoria DSH (idle, commit, compaction, dispose)",

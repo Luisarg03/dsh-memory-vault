@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-memory/memory-mcp",
+  "name": "@luisarg/memory-mcp",
   "version": "0.1.0",
   "type": "module",
   "description": "DSH MCP client for the memory vault",

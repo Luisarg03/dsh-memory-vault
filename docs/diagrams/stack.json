@@ -13,8 +13,8 @@
   },
   "components": [
     { "id": "dsh", "type": "external", "label": "DeepSeek Harness", "sublabel": "web / headless · perfil", "pos": [40, 150], "size": [150, 64] },
-    { "id": "memory-mcp", "type": "backend", "label": "memory-mcp", "sublabel": "@dsh-memory/memory-mcp · client MCP stdio", "pos": [310, 60], "size": [180, 64] },
-    { "id": "memory-auto", "type": "backend", "label": "memory-auto", "sublabel": "@dsh-memory/memory-auto · hooks + digest", "pos": [310, 240], "size": [180, 64] },
+    { "id": "memory-mcp", "type": "backend", "label": "memory-mcp", "sublabel": "@luisarg/memory-mcp · client MCP stdio", "pos": [310, 60], "size": [180, 64] },
+    { "id": "memory-auto", "type": "backend", "label": "memory-auto", "sublabel": "@luisarg/memory-auto · hooks + digest", "pos": [310, 240], "size": [180, 64] },
     { "id": "dsh-llm", "type": "backend", "label": "ctx.llm (dsh-llm)", "sublabel": "servicio LLM del harness", "pos": [590, 60], "size": [180, 64] },
     { "id": "deepseek-api", "type": "external", "label": "DeepSeek API", "sublabel": "provider deepseek-official", "pos": [590, 240], "size": [180, 64] },
     { "id": "server", "type": "backend", "label": "memory-vault-server", "sublabel": "Python · MCP server · 10 tools", "pos": [870, 60], "size": [180, 64] },

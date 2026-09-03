@@ -1,4 +1,4 @@
-# @dsh-memory/memory-auto
+# @luisarg/memory-auto
 
 Cordis bundle that auto-captures session memory for
 [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/) (DSH):
@@ -15,7 +15,7 @@ plugin uses the same key DSH is configured with.
 ## Install
 
 ```sh
-dsh plugin --profile web add @dsh-memory/memory-auto
+dsh plugin --profile web add @luisarg/memory-auto
 ```
 
 Requires `uv` on PATH (the vault server is spawned with `uv run`) and the

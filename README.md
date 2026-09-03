@@ -25,8 +25,8 @@ and a vault starter with templates and a type registry.
 
 | Component | What it does | Bundle |
 |---|---|---|
-| `memory-mcp` | MCP stdio wrapper: connects DSH to the memory vault server | `@dsh-memory/memory-mcp` |
-| `memory-auto` | Auto memory capture: session digest with commit/compaction checkpoints | `@dsh-memory/memory-auto` |
+| `memory-mcp` | MCP stdio wrapper: connects DSH to the memory vault server | `@luisarg/memory-mcp` |
+| `memory-auto` | Auto memory capture: session digest with commit/compaction checkpoints | `@luisarg/memory-auto` |
 | `memory-vault-server/` | Python MCP server: SQLite FTS5 + Markdown OKF | — |
 | `memory-vault/` | Vault starter: templates + type registry + tag vocabulary | — |
 | `scripts/digest_session.py` | Optional standalone post-session digest (CLI, not used by the plugins) | — |
@@ -49,15 +49,15 @@ dsh plugin --profile demo add ./packages/memory-mcp
 dsh plugin --profile demo add ./packages/memory-auto
 
 # tarball
-pnpm --filter @dsh-memory/memory-mcp pack
-pnpm --filter @dsh-memory/memory-auto pack
+pnpm --filter @luisarg/memory-mcp pack
+pnpm --filter @luisarg/memory-auto pack
 dsh plugin --profile demo add ./dsh-memory-memory-mcp-0.1.0.tgz ./dsh-memory-memory-auto-0.1.0.tgz
 
 # npm (recommended for distribution — pnpm does not support subdirectories in git
 # specs, so the subpackages of this monorepo cannot be installed directly from GitHub:
 # https://github.com/pnpm/pnpm/pull/7487)
 #   npm publish in packages/memory-mcp and packages/memory-auto, then:
-dsh plugin --profile demo add @dsh-memory/memory-mcp @dsh-memory/memory-auto
+dsh plugin --profile demo add @luisarg/memory-mcp @luisarg/memory-auto
 # ⚠️ `add github:Luisarg03/dsh-memory-vault` installs the repo root, which declares no
 # `dsh.bundle` — it stays a plain dependency and never activates as a profile layer.
 

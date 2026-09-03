@@ -1,4 +1,4 @@
-# @dsh-memory/memory-mcp
+# @luisarg/memory-mcp
 
 Cordis bundle that connects [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/)
 (DSH) to a persistent OKF memory vault over the Model Context Protocol.
@@ -11,7 +11,7 @@ vault's tools (`search_memory`, `store_*`, `export_memories`, `get_profile`,
 ## Install
 
 ```sh
-dsh plugin --profile web add @dsh-memory/memory-mcp
+dsh plugin --profile web add @luisarg/memory-mcp
 ```
 
 Requires `uv` on PATH — the plugin spawns the server with `uv run`.
