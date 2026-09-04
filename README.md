@@ -41,29 +41,36 @@ pnpm -r build
 dsh web --patch ./examples/dev-memory.cordis.yml
 ```
 
-## Install into a profile
+## Install
 
 ```sh
-# local checkout
-dsh plugin --profile demo add ./packages/memory-mcp
-dsh plugin --profile demo add ./packages/memory-auto
+# 1. install both plugins (npm, prebuilt — no build approvals)
+dsh plugin --profile web add @luisarg/memory-mcp @luisarg/memory-auto
 
-# tarball
-pnpm --filter @luisarg/memory-mcp pack
-pnpm --filter @luisarg/memory-auto pack
-dsh plugin --profile demo add ./dsh-memory-memory-mcp-0.1.0.tgz ./dsh-memory-memory-auto-0.1.0.tgz
+# 2. one-time setup: put the vault + server where the plugins look by default
+ln -s "$PWD/memory-vault-server" ~/.dsh/memory-vault-server   # or copy it
+ln -s "$PWD/memory-vault" ~/.dsh/memory-vault                 # or copy it
 
-# npm (recommended for distribution — pnpm does not support subdirectories in git
-# specs, so the subpackages of this monorepo cannot be installed directly from GitHub:
-# https://github.com/pnpm/pnpm/pull/7487)
-#   npm publish in packages/memory-mcp and packages/memory-auto, then:
-dsh plugin --profile demo add @luisarg/memory-mcp @luisarg/memory-auto
-# ⚠️ `add github:Luisarg03/dsh-memory-vault` installs the repo root, which declares no
-# `dsh.bundle` — it stays a plain dependency and never activates as a profile layer.
-
-# verify the composed layer
-dsh --profile demo --dump-config | grep -A2 memory
+# 3. launch and verify
+dsh web
+dsh --profile web --dump-config | grep -A8 memory
 ```
+
+> Requires `uv` on PATH. Paths resolve as: env (`DSH_MEMORY_PATH`,
+> `DSH_MEMORY_SERVER_DIR`) → `$DSH_HOME/memory-vault(-server)` → profile patch
+> (see [Path resolution](#path-resolution-cwd-independent)). Launch from any
+> directory.
+
+**Developers** (local checkout instead of npm):
+
+```sh
+dsh plugin --profile demo add ./packages/memory-mcp ./packages/memory-auto
+```
+
+**Offline**: `pnpm --filter @luisarg/memory-mcp pack` and add the `.tgz` files.
+
+Installing the repo root from GitHub is **not** supported (root has no
+`dsh.bundle`; pnpm lacks git subdirectory specs) — use npm or the tarball.
 
 ## Usage & interaction commands
 
@@ -126,16 +133,6 @@ this order:
 2. Defaults under the **harness home**: `$DSH_HOME/memory-vault` and
    `$DSH_HOME/memory-vault-server` (`~/.dsh` when `$DSH_HOME` is unset).
 3. Profile patch (`cordis.patch.yml`) or `--patch` overlay with explicit values.
-
-```sh
-# one-time setup: put the server and the vault starter under the harness home
-mkdir -p ~/.dsh
-ln -s "$PWD/memory-vault-server" ~/.dsh/memory-vault-server   # or copy it
-ln -s "$PWD/memory-vault" ~/.dsh/memory-vault                 # or copy it
-
-# then launch from anywhere — no env vars needed
-pnpm dsh web
-```
 
 | Env var | Used for | Default |
 |---|---|---|
