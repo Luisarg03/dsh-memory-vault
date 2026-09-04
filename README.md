@@ -45,7 +45,7 @@ dsh web --patch ./examples/dev-memory.cordis.yml
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp @luisarg/memory-auto
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.1 @luisarg/memory-auto@0.1.1
 
 # 2. launch — first boot installs the vault server + starter under $DSH_HOME
 #    (~/.dsh/memory-vault-server and ~/.dsh/memory-vault) automatically
@@ -57,7 +57,9 @@ dsh --profile web --dump-config | grep -A8 memory
 
 > Requires `uv` on PATH. The packages are self-contained: they ship the Python
 > vault server and the OKF vault starter, and copy them into place on first
-> boot (existing files are never overwritten). Paths resolve as: env
+> boot (existing files are never overwritten). The version is pinned because
+> pnpm's default `minimumReleaseAge` (3 days) would otherwise resolve the
+> older 0.1.0. Paths resolve as: env
 > (`DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`) → `$DSH_HOME/memory-vault(-server)`
 > → profile patch (see [Path resolution](#path-resolution-cwd-independent)).
 > Launch from any directory.
