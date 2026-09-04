@@ -1,6 +1,7 @@
-import { existsSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import {
@@ -56,6 +57,17 @@ function resolveUnderHome(value: string, fallbackSegment: string): string {
   return isAbsolute(v) ? v : join(dshHome(), v)
 }
 
+const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+
+/** Copy the bundled dir into `target` when `key` is missing there. */
+function ensure(target: string, bundled: string, key: string): boolean {
+  if (existsSync(join(target, key))) return false
+  if (!existsSync(bundled)) return false
+  mkdirSync(target, { recursive: true })
+  cpSync(bundled, target, { recursive: true })
+  return true
+}
+
 // DSH session shape minimal
 type DSHEvt = any
 type DSHSession = { id: string; events: DSHEvt[]; cwd?: string }
@@ -68,6 +80,16 @@ export function apply(ctx: Context, config: Config) {
 
   const memoryPath = resolveUnderHome(config.memoryPath, 'memory-vault')
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
+
+  // Self-contained install: first boot copies the bundled server and vault
+  // starter under the harness home when they are missing.
+  if (ensure(serverDir, join(packageRoot, 'server'), 'server.py')) {
+    console.log(`[memory-auto] installed memory-vault-server -> ${serverDir}`)
+  }
+  if (ensure(memoryPath, join(packageRoot, 'vault'), 'type-registry.yaml')) {
+    console.log(`[memory-auto] installed vault starter -> ${memoryPath}`)
+  }
+
   const digestConfig: DigestConfig = {
     memoryPath,
     serverDir,
@@ -77,14 +99,14 @@ export function apply(ctx: Context, config: Config) {
     minTranscriptChars: config.minTranscriptChars,
   }
 
-  if (!existsSync(serverDir)) {
+  if (!existsSync(join(serverDir, 'server.py'))) {
     console.warn(
-      `[memory-auto] vault server not found at ${serverDir} — the digest cannot write. ` +
-      'Install memory-vault-server there, or set DSH_MEMORY_SERVER_DIR / serverDir.',
+      `[memory-auto] vault server not found at ${serverDir} and not bundled — the digest cannot write. ` +
+      'Set DSH_MEMORY_SERVER_DIR (or run `node scripts/bundle-assets.mjs` in a checkout).',
     )
   }
-  if (!existsSync(memoryPath)) {
-    console.warn(`[memory-auto] vault not found at ${memoryPath} — it will be created on first use.`)
+  if (!existsSync(join(memoryPath, 'type-registry.yaml'))) {
+    console.warn(`[memory-auto] vault starter not found at ${memoryPath} — searches will fail until it exists.`)
   }
 
   const states = new Map<string, SessionState>()

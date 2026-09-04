@@ -1,18 +1,43 @@
 {
   "name": "@luisarg/memory-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "DSH MCP client for the memory vault",
-  "repository": { "type": "git", "url": "git+https://github.com/Luisarg03/dsh-memory-vault.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Luisarg03/dsh-memory-vault.git"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist/", "cordis.patch.yml"],
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
-  "scripts": { "build": "tsdown", "dev": "tsdown --watch", "test": "vitest run --passWithNoTests", "prepare": "tsdown" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "cordis.patch.yml",
+    "server/",
+    "vault/"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run --passWithNoTests",
+    "prepare": "tsdown && node ../../scripts/bundle-assets.mjs"
+  },
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.1",
     "@deepseek-ai/schemastery": "3.18.1"
   },
-  "devDependencies": { "typescript": "^5.9.2", "tsdown": "^0.15.6" }
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "tsdown": "^0.15.6"
+  }
 }

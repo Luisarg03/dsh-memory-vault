@@ -3,6 +3,8 @@
 # defaults resuelven bajo el home del harness (cwd-independent):
 #   $DSH_HOME/memory-vault-server y $DSH_HOME/memory-vault (~/.dsh por defecto)
 - insert:
+    - id: memory-mcp-bootstrap
+      name: '@luisarg/memory-mcp'
     - id: memory-mcp
       name: '@deepseek-ai/dsh-mcp-client'
       config:
