@@ -41,6 +41,17 @@ function ensure(target: string, bundled: string, key: string): boolean {
   return true
 }
 
+/** Copy one bundled file into `target` when missing (upgrades add files 0.1.1 → 0.1.2). */
+function ensureFile(target: string, bundled: string, file: string): boolean {
+  const dest = join(target, file)
+  if (existsSync(dest)) return false
+  const src = join(bundled, file)
+  if (!existsSync(src)) return false
+  mkdirSync(target, { recursive: true })
+  cpSync(src, dest)
+  return true
+}
+
 export function apply(ctx: Context, config: Config) {
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
   const memoryPath = resolveUnderHome(config.memoryPath, 'memory-vault')
@@ -53,6 +64,14 @@ export function apply(ctx: Context, config: Config) {
   }
   if (ensure(memoryPath, join(packageRoot, 'vault'), 'type-registry.yaml')) {
     console.log(`[memory-mcp] installed vault starter -> ${memoryPath}`)
+  }
+  // launcher.mjs runs the server via uv or the pip-venv fallback; upgrades of
+  // existing installs (server.py already present) still need the new files.
+  const bundled = join(packageRoot, 'server')
+  for (const file of ['launcher.mjs', 'requirements.txt']) {
+    if (ensureFile(serverDir, bundled, file)) {
+      console.log(`[memory-mcp] installed ${file} -> ${serverDir}`)
+    }
   }
   if (!existsSync(join(serverDir, 'server.py'))) {
     console.warn(

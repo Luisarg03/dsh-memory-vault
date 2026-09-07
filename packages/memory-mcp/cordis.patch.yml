@@ -10,8 +10,10 @@
       config:
         serverName: memory
         transport: stdio
-        command: uv
-        args: [run, --directory, !!js process.env.DSH_MEMORY_SERVER_DIR ?? dshHomePath('memory-vault-server'), python, server.py]
+        # launcher.mjs (bundled with the server): `uv run` when uv is on PATH,
+        # else a pip-managed .venv (python3 -m venv + pip install -r requirements.txt)
+        command: !!js process.execPath
+        args: [!!js "(process.env.DSH_MEMORY_SERVER_DIR ?? dshHomePath('memory-vault-server')) + '/launcher.mjs'"]
         env:
           MEMORY_PATH: !!js process.env.DSH_MEMORY_PATH ?? dshHomePath('memory-vault')
           UV_CACHE_DIR: /tmp/uv-cache

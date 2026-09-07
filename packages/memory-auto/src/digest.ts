@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import readline from 'node:readline'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { FinishReason, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
@@ -118,7 +120,7 @@ export async function extractEntriesWithLlm(
   return validateEntries(parsed)
 }
 
-/** Minimal MCP stdio client for the vault server (spawned via `uv run`). */
+/** Minimal MCP stdio client for the vault server (spawned via its launcher: uv, pip venv fallback). */
 export interface McpClient {
   callTool(name: string, args: Record<string, unknown>, timeoutMs?: number): Promise<unknown>
   close(): Promise<void>
@@ -126,9 +128,16 @@ export interface McpClient {
 
 export function connectMcp(memoryPath: string, serverDir: string): Promise<McpClient> {
   return new Promise((resolve, reject) => {
+    // Single decision point: the server bundle's launcher.mjs picks `uv run`
+    // or a pip-managed .venv. Legacy hand-made server dirs without a launcher
+    // keep the old direct `uv run` spawn.
+    const launcher = join(serverDir, 'launcher.mjs')
+    const [command, args] = existsSync(launcher)
+      ? [process.execPath, [launcher]]
+      : ['uv', ['run', '--directory', serverDir, 'python', 'server.py']]
     const child: ChildProcess = spawn(
-      'uv',
-      ['run', '--directory', serverDir, 'python', 'server.py'],
+      command,
+      args,
       {
         env: { ...process.env, MEMORY_PATH: memoryPath, UV_CACHE_DIR: process.env.UV_CACHE_DIR ?? '/tmp/uv-cache' },
         stdio: ['pipe', 'pipe', 'inherit'],

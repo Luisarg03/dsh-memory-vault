@@ -68,6 +68,17 @@ function ensure(target: string, bundled: string, key: string): boolean {
   return true
 }
 
+/** Copy one bundled file into `target` when missing (upgrades add files 0.1.1 → 0.1.2). */
+function ensureFile(target: string, bundled: string, file: string): boolean {
+  const dest = join(target, file)
+  if (existsSync(dest)) return false
+  const src = join(bundled, file)
+  if (!existsSync(src)) return false
+  mkdirSync(target, { recursive: true })
+  cpSync(src, dest)
+  return true
+}
+
 // DSH session shape minimal
 type DSHEvt = any
 type DSHSession = { id: string; events: DSHEvt[]; cwd?: string }
@@ -88,6 +99,14 @@ export function apply(ctx: Context, config: Config) {
   }
   if (ensure(memoryPath, join(packageRoot, 'vault'), 'type-registry.yaml')) {
     console.log(`[memory-auto] installed vault starter -> ${memoryPath}`)
+  }
+  // launcher.mjs runs the server via uv or the pip-venv fallback; upgrades of
+  // existing installs (server.py already present) still need the new files.
+  const bundledServer = join(packageRoot, 'server')
+  for (const file of ['launcher.mjs', 'requirements.txt']) {
+    if (ensureFile(serverDir, bundledServer, file)) {
+      console.log(`[memory-auto] installed ${file} -> ${serverDir}`)
+    }
   }
 
   const digestConfig: DigestConfig = {

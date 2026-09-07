@@ -45,7 +45,7 @@ dsh web --patch ./examples/dev-memory.cordis.yml
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp@0.1.1 @luisarg/memory-auto@0.1.1
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.2 @luisarg/memory-auto@0.1.2
 
 # 2. launch — first boot installs the vault server + starter under $DSH_HOME
 #    (~/.dsh/memory-vault-server and ~/.dsh/memory-vault) automatically
@@ -55,11 +55,16 @@ dsh web
 dsh --profile web --dump-config | grep -A8 memory
 ```
 
-> Requires `uv` on PATH. The packages are self-contained: they ship the Python
-> vault server and the OKF vault starter, and copy them into place on first
-> boot (existing files are never overwritten). The version is pinned because
-> pnpm's default `minimumReleaseAge` (3 days) would otherwise resolve the
-> older 0.1.0. Paths resolve as: env
+> `uv` on PATH is recommended but no longer required: the bundled
+> `launcher.mjs` runs the server with `uv run` when uv is present and falls
+> back to a pip-managed venv (`python3 -m venv` + `pip install -r
+> requirements.txt`, first boot needs network) when it is not. The packages
+> are self-contained: they ship the Python vault server and the OKF vault
+> starter, and copy them into place on first boot (existing files are never
+> overwritten; upgrades copy only the missing `launcher.mjs` and
+> `requirements.txt`). The version is pinned because
+> pnpm's default `minimumReleaseAge` (3 days) would otherwise resolve an
+> older release. Paths resolve as: env
 > (`DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`) → `$DSH_HOME/memory-vault(-server)`
 > → profile patch (see [Path resolution](#path-resolution-cwd-independent)).
 > Launch from any directory.
@@ -120,7 +125,9 @@ pnpm dsh web --port 3090
 ## Memory stack
 
 The plugins work on an OKF vault (`memory-vault/` in this repo, or your own).
-Requirement: `uv` installed (the server and the plugins run it via `uv run`).
+Runtime: `uv` on PATH, or Python ≥3.11 with a network on first boot — both
+launch paths go through the bundled `launcher.mjs`, which uses `uv run` and
+falls back to a pip-managed `.venv` (`requirements.txt`) when uv is missing.
 
 The post-session digest runs **in-process** through the harness's own LLM
 service (`ctx.llm`, provider `deepseek-official` by default — configurable with

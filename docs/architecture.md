@@ -13,12 +13,12 @@ declares a `dsh.bundle` manifest and mounts with
 
 ```
 DeepSeek Harness (web / headless)  ← plugins and services in the profile process
-├── memory-mcp        @luisarg/memory-mcp   MCP stdio client (spawns the server via uv)
+├── memory-mcp        @luisarg/memory-mcp   MCP stdio client (spawns the server via its launcher)
 ├── memory-auto       @luisarg/memory-auto  session hooks + in-process digest
 ├── ctx.llm           dsh-llm service          provider deepseek-official → DeepSeek API
 │        │ store_* via MCP stdio
 │        ▼
-└── memory-vault-server        Python MCP server · 10 tools (spawned via uv run)
+└── memory-vault-server        Python MCP server · 10 tools (spawned via launcher.mjs: uv run, or pip venv fallback)
          │ SQLite FTS5 + Markdown
          ▼
     memory-vault                OKF bundle: templates · type-registry · tag-vocabulary
@@ -67,7 +67,8 @@ never takes the agent down.
 <sub>[Interactive version](diagrams/mcp-tool-call.html)</sub>
 
 The agent issues `tools/call`; `memory-mcp` forwards JSON-RPC over stdio to
-`memory-vault-server` (spawned with `uv run`), which queries the store and
+`memory-vault-server` (spawned by its bundled `launcher.mjs`, which
+uses `uv run` or falls back to a pip-managed `.venv`), which queries the store and
 returns the tool result. The server runs as a separate process: a server crash
 never takes the agent down.
 
@@ -98,7 +99,9 @@ the harness home (`$DSH_HOME/memory-vault`, `$DSH_HOME/memory-vault-server`;
 Plugin-level config (patch layer): `provider` (`deepseek-official`),
 `model` (`deepseek-v4-flash`), `maxTokens`, `minTranscriptChars`, `enabled`.
 
-Requires `uv` on PATH (the server and the plugins run it via `uv run`).
+Runtime: `uv` on PATH, or Python ≥3.11 — `launcher.mjs` runs the server
+with `uv run` and falls back to a pip-managed `.venv` (`python3 -m venv` +
+`pip install -r requirements.txt`) when uv is missing.
 
 ## Layer order
 

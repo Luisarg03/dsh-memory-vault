@@ -11,7 +11,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
 const EXCLUDE = /(^|\/)(\.venv|__pycache__|node_modules)(\/|$)/
 
-const SERVER_FILES = ['server.py', 'store.py', 'registry.py', 'cli.py', 'pyproject.toml', 'uv.lock']
+const SERVER_FILES = ['server.py', 'store.py', 'registry.py', 'cli.py', 'pyproject.toml', 'uv.lock', 'launcher.mjs', 'requirements.txt']
 const STARTER_FILES = ['type-registry.yaml', 'tag-vocabulary.json', 'README.md']
 const STARTER_DIRS = ['templates']
 

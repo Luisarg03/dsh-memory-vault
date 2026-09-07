@@ -1,0 +1,4 @@
+# Mirror of the dependencies in pyproject.toml — keep in sync by hand.
+# Used only by launcher.mjs' pip fallback on hosts without uv.
+mcp>=1.2.0
+PyYAML>=6.0
