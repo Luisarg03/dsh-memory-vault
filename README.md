@@ -122,6 +122,27 @@ your main session):
 pnpm dsh web --port 3090
 ```
 
+### Second MCP client: opencode (zona central `~/.memories`)
+
+Since 2026-09-09 the vault lives in a dedicated git repo at `~/.memories`
+(union of the former DSH vault and the legacy `opencode-memory-vault`
+bundle; see [`docs/central-zone.md`](docs/central-zone.md)). opencode is a
+second stdio MCP client over the same server and vault — `~/.config/opencode/opencode.json`:
+
+```json
+"mcp": {
+  "memory-server": {
+    "type": "local",
+    "command": ["uv", "run", "--directory", "<repo>/memory-vault-server", "python", "server.py"],
+    "enabled": true,
+    "environment": { "MEMORY_PATH": "/home/hiro03/.memories" }
+  }
+}
+```
+
+> opencode requires the key **`environment`** (not `env` — that one is
+> silently ignored and the server falls back to the repo default vault).
+
 ## Memory stack
 
 The plugins work on an OKF vault (`memory-vault/` in this repo, or your own).
