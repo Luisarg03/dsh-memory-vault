@@ -80,6 +80,13 @@ dsh plugin --profile demo add ./packages/memory-mcp ./packages/memory-auto
 Installing the repo root from GitHub is **not** supported (root has no
 `dsh.bundle`; pnpm lacks git subdirectory specs) — use npm or the tarball.
 
+Releases are published by CI: pushing a `v<version>` tag builds, tests,
+validates the tarballs and publishes both packages to npm with a
+[provenance attestation](https://docs.npmjs.com/generated-provenance-statements),
+authenticated by GitHub OIDC — no publish token exists in this repository or on
+the maintainer's machine. What runs before an artifact ships, and the guardrails
+around it, are in [`docs/releasing.md`](docs/releasing.md#security-layers-around-the-release).
+
 ## Usage & interaction commands
 
 Once installed, the agent can read and write the vault through the
