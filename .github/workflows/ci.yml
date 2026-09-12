@@ -19,12 +19,15 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+      # MUST run before Test: the integration tests spawn the vault server
+      # through launcher.mjs, which falls back to `python3 -m venv` + pip when
+      # no `uv` is on PATH — too slow for vitest's 5 s default test timeout.
+      - uses: astral-sh/setup-uv@v5
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm -r build
       - name: Test
         run: pnpm -r test
-      - uses: astral-sh/setup-uv@v5
       - name: Server imports (uv-managed deps)
         run: uv run --directory memory-vault-server python -c "import server; print('server.py imports cleanly')"
