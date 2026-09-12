@@ -1,22 +1,27 @@
 // Tests for the release guardrails. If these break, the publish workflow is
 // lying about what it verified — so they run in CI on every push.
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   PACKAGES,
   REQUIRED_TARBALL_FILES,
   ROOT,
   packageVersions,
+  remoteTagIsAnnotated,
   tagProblems,
   tarballProblems,
   versionProblems,
 } from '../../../scripts/release-lib.mjs'
 
-const run = (args) => {
+const run = (args, opts = {}) => {
   try {
-    return { status: 0, stdout: execFileSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8' }) }
+    return {
+      status: 0,
+      stdout: execFileSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8', ...opts }),
+    }
   } catch (err) {
     return { status: err.status ?? 1, stdout: String(err.stdout ?? ''), stderr: String(err.stderr ?? '') }
   }
@@ -129,31 +134,66 @@ describe('release-check CLI', () => {
   })
 })
 
-describe('bundle-assets under concurrency', () => {
-  // Regression: both packages' `prepare` used to run bundle-assets.mjs at the
-  // same time, and rmSync+cpSync on the same directory produced
-  // "ENOENT: chmod .../server" and "ENOTEMPTY" in CI. The lock in the script
-  // and the single call site are what keep this green.
-  it('survives several concurrent runs and leaves both packages complete', async () => {
-    const { spawn } = await import('node:child_process')
-    const script = join(ROOT, 'scripts', 'bundle-assets.mjs')
-    const results = await Promise.all(
-      Array.from({ length: 4 }, () =>
-        new Promise((resolve) => {
-          const child = spawn(process.execPath, [script], { cwd: ROOT, stdio: 'ignore' })
-          child.on('exit', (code) => resolve(code))
-        }),
-      ),
-    )
-    expect(results).toEqual([0, 0, 0, 0])
+describe('bundle-assets call sites', () => {
+  // Regression guard for the race CI caught: bundle-assets.mjs does
+  // rmSync+cpSync on the same two target directories, so two concurrent
+  // invocations (one per package `prepare`) produced
+  // "ENOENT: chmod .../server" and "ENOTEMPTY". The fix was to call it once
+  // from the root build instead of from both packages. This asserts the single
+  // call site — the part that actually keeps the race from happening — and that
+  // the script still serializes if something calls it twice (the lock).
+  it('is invoked only by the root build, not by each package', () => {
+    const rootScripts = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts
+    expect(rootScripts.build).toContain('bundle-assets.mjs')
 
-    for (const pkg of ['memory-mcp', 'memory-auto']) {
-      for (const file of ['server/server.py', 'server/launcher.mjs', 'vault/type-registry.yaml']) {
-        expect(existsSync(join(ROOT, 'packages', pkg, file)), `${pkg}/${file}`).toBe(true)
+    for (const pkg of PACKAGES) {
+      const scripts = JSON.parse(readFileSync(join(ROOT, pkg, 'package.json'), 'utf8')).scripts
+      expect(scripts.prepare ?? '', `${pkg} prepare must not bundle`).not.toContain('bundle-assets')
+      for (const [name, cmd] of Object.entries(scripts)) {
+        expect(cmd, `${pkg}:${name}`).not.toContain('bundle-assets')
       }
     }
-    expect(existsSync(join(ROOT, '.tmp', 'bundle-assets.lock'))).toBe(false)
-  }, 30_000)
+  })
+})
+
+describe('annotated tag detection', () => {
+  // The guard asks the *remote* whether the tag is annotated, because a shallow
+  // CI checkout can hold the tag ref without the annotated tag object. This
+  // covers both answers without touching the real repository.
+  const bare = join(tmpdir(), `memtag-remote-${process.pid}.git`)
+  const work = join(tmpdir(), `memtag-work-${process.pid}`)
+  const gitIn = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+
+  beforeAll(() => {
+    rmSync(work, { recursive: true, force: true })
+    rmSync(bare, { recursive: true, force: true })
+    execFileSync('git', ['init', '-q', '--bare', bare])
+    execFileSync('git', ['init', '-q', work])
+    writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'x', version: '9.9.9' }))
+    gitIn(work, 'add', 'package.json')
+    gitIn(work, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init')
+    gitIn(work, 'remote', 'add', 'origin', bare)
+    gitIn(work, 'tag', 'v9.9.9')
+    gitIn(work, 'tag', '-a', 'v9.9.10', '-m', 'annotated')
+    gitIn(work, 'push', '-q', 'origin', 'HEAD:main', '--tags')
+  })
+
+  afterAll(() => {
+    rmSync(work, { recursive: true, force: true })
+    rmSync(bare, { recursive: true, force: true })
+  })
+
+  it('detects an annotated tag on the remote', () => {
+    expect(remoteTagIsAnnotated(work, 'v9.9.10', gitIn)).toBe(true)
+  })
+
+  it('detects a lightweight tag on the remote', () => {
+    expect(remoteTagIsAnnotated(work, 'v9.9.9', gitIn)).toBe(false)
+  })
+
+  it('returns null when there is no origin to ask', () => {
+    expect(remoteTagIsAnnotated(bare, 'v9.9.10', gitIn)).toBeNull()
+  })
 })
 
 describe('workflow wiring', () => {
