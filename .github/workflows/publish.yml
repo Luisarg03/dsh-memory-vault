@@ -33,10 +33,11 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # A protected environment adds a human approval gate before the job starts.
-    # Leave the environment unprotected for a fully automatic release; add
-    # required reviewers if you want a click between the tag and npm.
-    environment: release
+    # The environment name is part of the OIDC claim set npm matches against the
+    # Trusted Publisher entry, so both sides must agree exactly. Overridable
+    # with the repository variable NPM_PUBLISH_ENVIRONMENT (Settings ->
+    # Secrets and variables -> Actions -> Variables) without editing this file.
+    environment: ${{ vars.NPM_PUBLISH_ENVIRONMENT || 'release' }}
     timeout-minutes: 30
     steps:
       # fetch-tags: without it the checkout has a tag *ref* but not the
