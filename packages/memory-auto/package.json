@@ -43,7 +43,7 @@
   "devDependencies": {
     "typescript": "^5.9.2",
     "tsdown": "^0.15.6",
-    "vitest": "^3.2.7",
+    "vitest": "^4.1.11",
     "@deepseek-ai/dsh-llm": "0.1.0-rc.7"
   }
 }
