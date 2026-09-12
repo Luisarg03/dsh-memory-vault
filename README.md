@@ -45,7 +45,7 @@ dsh web --patch ./examples/dev-memory.cordis.yml
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp@0.1.2 @luisarg/memory-auto@0.1.2
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.3 @luisarg/memory-auto@0.1.3
 
 # 2. launch — first boot installs the vault server + starter under $DSH_HOME
 #    (~/.dsh/memory-vault-server and ~/.dsh/memory-vault) automatically

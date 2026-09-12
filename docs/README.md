@@ -24,7 +24,7 @@ stack: persistent OKF memory for [DeepSeek Harness](https://deepseek-harness.git
 
 ## Releasing
 
-- [releasing.md](releasing.md) — version tags (`v0.1.0` … `v0.1.2`), the publish
+- [releasing.md](releasing.md) — version tags (`v0.1.0` … `v0.1.3`), the publish
   procedure and the npm `gitHead` ↔ tag check
 
 ## Design notes

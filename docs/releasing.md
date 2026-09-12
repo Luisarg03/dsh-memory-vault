@@ -57,11 +57,12 @@ landed after the publish commit (see the 0.1.1 note below).
 |---|---|---|---|---|
 | [`v0.1.0`](../../releases/tag/v0.1.0) | 2026-09-03 15:30 | `0.1.0` | `3141e9e` | First publish; scope rename `@dsh-memory` → `@luisarg`. Tarball without `server/` (7 files). Live ~9 h. |
 | [`v0.1.1`](../../releases/tag/v0.1.1) | 2026-09-04 00:38 | `0.1.1` | `a1ccb5f` | Self-contained tarballs (25 files): Python server + vault starter bundled, first-boot bootstrap. Requires `uv`. |
-| [`v0.1.2`](../../releases/tag/v0.1.2) | 2026-09-07 16:32 | `0.1.2` | `930b7f7` | `launcher.mjs` falls back to a pip venv when `uv` is absent (27 files). Current `latest`. |
+| [`v0.1.2`](../../releases/tag/v0.1.2) | 2026-09-07 16:32 | `0.1.2` | `930b7f7` | `launcher.mjs` falls back to a pip venv when `uv` is absent (27 files). |
+| [`v0.1.3`](../../releases/tag/v0.1.3) | 2026-09-12 17:35 | `0.1.3` | `9878fce` | SQLite `timeout=30` (a busy lock from the other MCP client surfaced as "corrupt database" at startup) + `UV_CACHE_DIR` default under the OS temp dir (28 files). Current `latest`. |
 
-Untagged on purpose: `3610064` (docs state of 0.1.0, pushed after its publish)
-and `861d54b` (central zone `~/.memories` — not published to npm; it will ride
-along with the next release tag).
+Untagged on purpose: `3610064` (docs state of 0.1.0, pushed after its publish),
+`861d54b` (central zone `~/.memories`), `1220f71` and the CI/doc commits before
+`9878fce` — none published to npm; they ride along inside the next release tag.
 
 ## Pitfalls
 
@@ -72,8 +73,18 @@ along with the next release tag).
 - **Never retag a pushed tag.** Publishing is not reversible: `npm unpublish`
   is heavily restricted after 72 h. A wrong publish commit needs a new version,
   not a moved tag.
-- **`gh` CLI auth is currently invalid** on this machine (`gh api` → 401), so
-  GitHub Releases cannot be created from here until `gh auth login`.
-  Tags are plain git refs and push without GitHub auth. The job-logs API is
-  admin-only, so with an invalid token a red CI run cannot be diagnosed from
-  here either (`/actions/jobs/<id>/logs` → 403).
+- **npm publish needs an OTP.** The account has 2FA enabled for writes, so an
+  agent or script cannot publish unattended: `npm publish` returns 401
+  "You must provide a one-time pass" without `--otp=<code>`. The `~/.npmrc`
+  token is fine for reads (`whoami` succeeds) and insufficient for writes.
+  For unattended releases, replace it with a granular token that has the
+  **Automation** permission (bypasses OTP by design).
+- **The registry is eventually consistent.** Right after a publish the plain
+  `GET /@luisarg/<pkg>` can still serve metadata without the new version;
+  `npm view <pkg>@<version>` or a cache-busted request is authoritative.
+- **`gh` CLI is authenticated** (logged in as `Luisarg03` since 2026-09-12), so
+  GitHub Releases can be created and red CI runs diagnosed with
+  `gh run view <id> --log-failed`. Note the job-logs API is admin-only for
+  other tools (/actions/jobs/<id>/logs → 403) and `gh` needs a writable cache:
+  set `XDG_CACHE_HOME` to a path inside the workspace when the sandbox blocks
+  `~/.cache/gh`.
