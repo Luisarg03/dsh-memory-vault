@@ -68,6 +68,21 @@ jobs:
             exit 1
           fi
 
+      # Fail in the first minute, not after the build: a tag pushed without
+      # `id-token: write`, or a workflow rename that invalidates the npm-side
+      # Trusted Publisher entry, both surface right here.
+      - name: Preflight OIDC
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::no OIDC token endpoint — the job needs permissions: id-token: write"
+            exit 1
+          fi
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::NODE_AUTH_TOKEN is set; remove it so npm uses the OIDC exchange instead of a token"
+            exit 1
+          fi
+          echo "OIDC endpoint present; publishing with Trusted Publishing (no token)"
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
