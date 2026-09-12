@@ -96,8 +96,15 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # `pnpm -r build` runs only each package's build script; the vault server
+      # and starter are bundled by the ROOT build, so `pnpm bundle` has to run
+      # too. Skipping it publishes 8-file tarballs with no server — the exact
+      # failure the tarball guard below exists to catch.
       - name: Build
         run: pnpm -r build
+
+      - name: Bundle server + vault starter into the packages
+        run: pnpm bundle
 
       - name: Test
         run: pnpm -r test
