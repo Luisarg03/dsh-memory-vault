@@ -129,6 +129,33 @@ describe('release-check CLI', () => {
   })
 })
 
+describe('bundle-assets under concurrency', () => {
+  // Regression: both packages' `prepare` used to run bundle-assets.mjs at the
+  // same time, and rmSync+cpSync on the same directory produced
+  // "ENOENT: chmod .../server" and "ENOTEMPTY" in CI. The lock in the script
+  // and the single call site are what keep this green.
+  it('survives several concurrent runs and leaves both packages complete', async () => {
+    const { spawn } = await import('node:child_process')
+    const script = join(ROOT, 'scripts', 'bundle-assets.mjs')
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        new Promise((resolve) => {
+          const child = spawn(process.execPath, [script], { cwd: ROOT, stdio: 'ignore' })
+          child.on('exit', (code) => resolve(code))
+        }),
+      ),
+    )
+    expect(results).toEqual([0, 0, 0, 0])
+
+    for (const pkg of ['memory-mcp', 'memory-auto']) {
+      for (const file of ['server/server.py', 'server/launcher.mjs', 'vault/type-registry.yaml']) {
+        expect(existsSync(join(ROOT, 'packages', pkg, file)), `${pkg}/${file}`).toBe(true)
+      }
+    }
+    expect(existsSync(join(ROOT, '.tmp', 'bundle-assets.lock'))).toBe(false)
+  }, 30_000)
+})
+
 describe('workflow wiring', () => {
   it('publishes on version tags from a pinned workflow', () => {
     const publish = join(ROOT, '.github', 'workflows', 'publish.yml')

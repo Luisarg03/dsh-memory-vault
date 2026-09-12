@@ -1,6 +1,6 @@
 {
   "name": "@luisarg/memory-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "DSH MCP client for the memory vault",
   "repository": {
@@ -30,7 +30,7 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "test": "vitest run --passWithNoTests",
-    "prepare": "tsdown && node ../../scripts/bundle-assets.mjs"
+    "prepare": "tsdown"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.1",
