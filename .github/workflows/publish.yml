@@ -15,6 +15,9 @@ on:
   push:
     tags:
       - "v*"
+  # Manual retry of the current tag without re-pushing it: useful while wiring
+  # up the npm-side Trusted Publisher, and for resuming a half-finished release.
+  workflow_dispatch:
 
 # Least privilege: id-token to exchange for the npm OIDC token, contents to
 # create the GitHub Release. Nothing else is granted.
@@ -103,6 +106,26 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # One release identity for both triggers. On a tag push it is the tag; on
+      # a manual dispatch the tag has to already exist, and is resolved from
+      # package.json so it can never be a version nobody tagged.
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          version="$(node -p "require('./packages/memory-mcp/package.json').version")"
+          tag="v$version"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "::error::tag $tag does not exist; release-check requires the tag to point at the published commit"
+              exit 1
+            fi
+            echo "manual dispatch for existing tag $tag"
+          elif [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       # `pnpm -r build` runs only each package's build script; the vault server
       # and starter are bundled by the ROOT build, so `pnpm bundle` has to run
       # too. Skipping it publishes 8-file tarballs with no server — the exact
@@ -119,7 +142,7 @@ jobs:
       # Tag, both package.json versions and HEAD must agree before anything
       # reaches the registry. --strict because CI checks out the tag itself.
       - name: Release guard
-        run: node scripts/release-check.mjs --tag "$GITHUB_REF_NAME" --strict
+        run: node scripts/release-check.mjs --tag "${{ steps.tag.outputs.tag }}" --strict
 
       - name: Pack
         run: |
@@ -174,17 +197,21 @@ jobs:
           done
 
       # The registry is eventually consistent right after a publish, so verify
-      # through the CLI and confirm gitHead is this commit — that is the check
-      # docs/releasing.md is built on.
+      # through the CLI and confirm gitHead is the commit the tag points at —
+      # that is the check docs/releasing.md is built on. On a manual dispatch
+      # GITHUB_SHA is the branch tip, so compare against the tag instead.
       - name: Verify published artifacts
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
+          expected="$(git rev-list -n1 "$TAG")"
           for dir in packages/memory-mcp packages/memory-auto; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
             head="$(npm view "$name@$version" gitHead)"
-            echo "$name@$version gitHead=$head"
-            if [ "$head" != "$GITHUB_SHA" ]; then
-              echo "::error::$name@$version records gitHead $head, expected $GITHUB_SHA"
+            echo "$name@$version gitHead=$head (expected $expected)"
+            if [ "$head" != "$expected" ]; then
+              echo "::error::$name@$version records gitHead $head, expected the commit $TAG points at ($expected)"
               exit 1
             fi
           done
@@ -192,8 +219,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists — leaving it alone (idempotent re-run)"
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "$TAG" \
             --notes "Published \`@luisarg/memory-mcp\` and \`@luisarg/memory-auto\` to npm with provenance. Versions and commit mapping: docs/releasing.md." \
             --verify-tag
