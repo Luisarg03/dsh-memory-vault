@@ -263,7 +263,10 @@ class MemoryStore:
         db_path = self.storage_path / "memory.db"
         if db_path.exists() and db_path.stat().st_size > 0:
             try:
-                test_conn = sqlite3.connect(str(db_path))
+                # timeout=30: with WAL a live vault may be written by another
+                # client (DSH + opencode). Without it the probe waits only 5 s
+                # and a busy lock surfaces as "corrupt database".
+                test_conn = sqlite3.connect(str(db_path), timeout=30)
                 row = test_conn.execute("PRAGMA integrity_check").fetchone()
                 test_conn.close()
                 if row[0].lower() != "ok":
@@ -271,7 +274,7 @@ class MemoryStore:
             except sqlite3.DatabaseError as e:
                 raise RuntimeError(f"corrupt database: {e}") from e
 
-        self._db = sqlite3.connect(str(db_path))
+        self._db = sqlite3.connect(str(db_path), timeout=30)
         self._db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")

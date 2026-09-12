@@ -12,6 +12,7 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -57,7 +58,10 @@ function main() {
   const withUv = hasUv()
   const { command, args } = resolveRunner(withUv)
   if (!withUv) ensurePipEnv()
-  const child = spawn(command, args, { cwd: DIR, env: process.env, stdio: 'inherit' })
+  // Default the uv cache under the OS temp dir (Windows has no /tmp); an
+  // explicit UV_CACHE_DIR from the patch layer or env still wins.
+  const env = { UV_CACHE_DIR: join(tmpdir(), 'uv-cache'), ...process.env }
+  const child = spawn(command, args, { cwd: DIR, env, stdio: 'inherit' })
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => child.kill(sig))
   child.on('error', (err) => {
     console.error(`[memory-vault-server] spawn failed (${command}): ${err.message}`)

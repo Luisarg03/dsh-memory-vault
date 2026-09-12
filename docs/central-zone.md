@@ -65,6 +65,7 @@ indexan — el server tampoco los escribiría.
 ## Tercer cliente
 
 Cualquier cliente MCP que spawnée el server con `MEMORY_PATH=~/.memories`
-comparte la zona. Concurrencia: SQLite WAL, timeout 5 s default — writes
-pequeños single-user OK; si aparece `SQLITE_BUSY` agregar `busy_timeout`
-en `store.py` (1 línea).
+comparte la zona. Concurrencia: SQLite WAL y `timeout=30` explícito en las
+conexiones de `store.py` (antes 5 s default) — writes pequeños single-user OK.
+El timeout aplica también al `PRAGMA integrity_check` del arranque: con el
+default, un lock de otro cliente se reportaba como `corrupt database`.
