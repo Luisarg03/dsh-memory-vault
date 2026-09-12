@@ -136,26 +136,26 @@ jobs:
       - name: Validate tarballs
         run: node scripts/check-tarball.mjs dist-tarballs/*.tgz
 
-      # npm publish on the tarball, not pnpm publish: it keeps OIDC and
-      # provenance on the well-trodden path (pnpm 11 broke OIDC publishing) and
-      # publishes exactly the artifact validated above.
+      # Publish from each package directory rather than from a packed tarball:
+      # that is the working shape of npm Trusted Publishing, and publishing a
+      # tarball path does not attempt the OIDC exchange at all (ENEEDAUTH even
+      # with the registry configured and no token in the environment).
+      #
+      # --ignore-scripts keeps `prepare` (tsdown) from running again: dist/ and
+      # the bundled server/ + vault/ were built and tested above, and this
+      # publishes exactly those files.
       - name: Publish to npm (OIDC + provenance)
         env:
           NPM_CONFIG_PROVENANCE: "true"
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          published=0
           echo "node $(node --version) / npm $(npm --version)"
           echo "registry: $(npm config get registry)"
-          echo "project .npmrc:"; cat .npmrc 2>/dev/null || echo "(none)"
           echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
           echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
-          # Absolute paths: npm reads a bare relative path as a package spec and
-          # tries `git ls-remote ssh://git@github.com/<path>.git`.
-          for tgz in "$PWD"/dist-tarballs/*.tgz; do
-            name="$(tar -xzOf "$tgz" package/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).name))')"
-            version="$(tar -xzOf "$tgz" package/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')"
+          for dir in packages/memory-mcp packages/memory-auto; do
+            name="$(node -p "require('./$dir/package.json').name")"
+            version="$(node -p "require('./$dir/package.json').version")"
 
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is already on npm — skipping (idempotent re-run)"
@@ -163,17 +163,15 @@ jobs:
             fi
 
             echo "::group::npm publish $name@$version"
-            if npm publish "$tgz" --access public; then
-              published=$((published + 1))
+            if (cd "$dir" && npm publish --access public --ignore-scripts); then
+              echo "::endgroup::"
             else
               status=$?
               echo "::endgroup::"
-              echo "::error::npm publish $name@$version failed (exit $status). A 404 here means the Trusted Publisher config on npmjs.com does not match this repo/workflow/environment, or the package does not exist yet (OIDC cannot create a brand-new package — publish its first version manually)."
+              echo "::error::npm publish $name@$version failed (exit $status). A 404 or ENEEDAUTH here means the Trusted Publisher config on npmjs.com does not match this repo/workflow/environment, or the package does not exist yet (OIDC cannot create a brand-new package — publish its first version manually)."
               exit $status
             fi
-            echo "::endgroup::"
           done
-          echo "published=$published" >> "$GITHUB_OUTPUT"
 
       # The registry is eventually consistent right after a publish, so verify
       # through the CLI and confirm gitHead is this commit — that is the check
