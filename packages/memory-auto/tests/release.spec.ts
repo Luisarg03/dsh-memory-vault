@@ -163,6 +163,9 @@ describe('annotated tag detection', () => {
   const bare = join(tmpdir(), `memtag-remote-${process.pid}.git`)
   const work = join(tmpdir(), `memtag-work-${process.pid}`)
   const gitIn = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  // A CI runner has no git identity, and `git tag -a` insists on one for the
+  // tagger. Set it on the fixture repo rather than trusting the environment.
+  const IDENT = ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid']
 
   beforeAll(() => {
     rmSync(work, { recursive: true, force: true })
@@ -171,10 +174,10 @@ describe('annotated tag detection', () => {
     execFileSync('git', ['init', '-q', work])
     writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'x', version: '9.9.9' }))
     gitIn(work, 'add', 'package.json')
-    gitIn(work, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init')
+    gitIn(work, ...IDENT, 'commit', '-qm', 'init')
     gitIn(work, 'remote', 'add', 'origin', bare)
     gitIn(work, 'tag', 'v9.9.9')
-    gitIn(work, 'tag', '-a', 'v9.9.10', '-m', 'annotated')
+    gitIn(work, ...IDENT, 'tag', '-a', 'v9.9.10', '-m', 'annotated')
     gitIn(work, 'push', '-q', 'origin', 'HEAD:main', '--tags')
   })
 
