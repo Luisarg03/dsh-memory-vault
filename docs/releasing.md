@@ -35,21 +35,71 @@ landed after the publish commit (see the 0.1.1 note below).
 
 ## Publishing a release
 
-1. Bump `version` in **both** `packages/memory-mcp/package.json` and
-   `packages/memory-auto/package.json` — same version in a single commit.
-2. `pnpm -r build && pnpm -r test` (CI runs both on `main`, plus a server
-   import check under `uv`).
-3. Publish from the repo root:
-   ```sh
-   pnpm --filter @luisarg/memory-mcp publish --access public --no-git-checks
-   pnpm --filter @luisarg/memory-auto publish --access public --no-git-checks
-   ```
-   `prepare` runs `tsdown` + `scripts/bundle-assets.mjs`, so the tarball ships
-   `dist/`, the Python server and the vault starter. Verify with
-   `npm view @luisarg/memory-mcp dist.fileCount` (expect >20, not 7).
-4. Tag the publish commit (step 1) and push the tag.
-5. Bump the pinned install line in the root [README](../README.md#install) if
-   the documented version changed.
+Releases are published by CI, not from a laptop. Pushing an annotated tag
+`v<version>` to `main` triggers `.github/workflows/publish.yml`, which builds,
+tests, validates the tarballs and publishes both packages to npm with a
+provenance attestation.
+
+```sh
+# 1. bump both package.json files in lockstep
+pnpm release:bump 0.1.4
+pnpm -r build && pnpm -r test && pnpm release:check
+
+# 2. merge the bump to main through a PR (the ruleset requires the CI check)
+
+# 3. tag the merged commit and push the tag
+git tag -a v0.1.4 -m "Release 0.1.4" && git push origin v0.1.4
+```
+
+Then the workflow takes over:
+
+1. fails fast if npm < 11.5.1 (Trusted Publishing requirement);
+2. `release-check.mjs --tag v0.1.4 --strict` — tag, both package versions and
+   HEAD must agree, and the tree must be clean;
+3. packs both packages and validates every tarball (`check-tarball.mjs`):
+   required bundled files present, no vault data, no build residue;
+4. `npm publish <tarball> --access public` per package, authenticated by OIDC.
+   A version already on npm is skipped, so a re-run resumes instead of failing;
+5. verifies the published `gitHead` equals the tag's commit;
+6. creates the GitHub Release for the tag.
+
+If you must publish by hand (npm outage, hotfix), the equivalent manual path is
+`pnpm -r build && pnpm pack` then `npm publish <tgz> --access public --otp=<code>`,
+and only then tag — the tag must point at the commit whose `package.json`
+versions actually reached npm.
+
+### One-time npm setup (already done for 0.1.x — a new package needs it)
+
+Per package on npmjs.com → Settings:
+
+| Setting | Value |
+|---|---|
+| Trusted Publisher → Provider | GitHub Actions |
+| Organization or user | `Luisarg03` |
+| Repository | `dsh-memory-vault` |
+| Workflow filename | `publish.yml` |
+| Environment name | `release` |
+| Allowed actions | `npm publish` |
+| Publishing access | *Require 2FA and disallow tokens* |
+
+The last row is what removes the token: publishing authority flows only through
+the OIDC exchange, and the workflow file is part of what npm verifies. **OIDC
+cannot create a package that does not exist yet** — a brand-new package gets its
+first version published manually with `--otp`, and OIDC takes over from the
+second release onward.
+
+### Security layers around the release
+
+| Layer | Where | What it stops |
+|---|---|---|
+| No publish token anywhere; OIDC + provenance | npm settings + `publish.yml` | a leaked long-lived token publishing in your name |
+| `id-token: write` only in the publish job; every other workflow is `contents: read` | `.github/workflows/*` | a compromised CI job minting release credentials |
+| Tag push is the trigger; only admins can push tags | GitHub ruleset | writing to `main` alone cannot publish |
+| `main` requires a PR and the `build-test` check | GitHub ruleset | unreviewed or red code reaching a release |
+| Release job runs without a dependency cache | `publish.yml` (`package-manager-cache: false`) | cache poisoning feeding the published artifact |
+| Tarball contents validated before publish | `scripts/check-tarball.mjs` | vault data or `.venv`/`__pycache__` shipping to users |
+| Actions pinned to commit SHAs, enforced repo-wide | workflows + `sha_pinning_required` | a retagged upstream action running unreviewed code |
+| Secret scanning + push protection, plus a token-pattern grep in CI | GitHub settings + `security.yml` | credentials committed into the repo |
 
 ## Released versions
 
@@ -73,12 +123,13 @@ Untagged on purpose: `3610064` (docs state of 0.1.0, pushed after its publish),
 - **Never retag a pushed tag.** Publishing is not reversible: `npm unpublish`
   is heavily restricted after 72 h. A wrong publish commit needs a new version,
   not a moved tag.
-- **npm publish needs an OTP.** The account has 2FA enabled for writes, so an
-  agent or script cannot publish unattended: `npm publish` returns 401
-  "You must provide a one-time pass" without `--otp=<code>`. The `~/.npmrc`
-  token is fine for reads (`whoami` succeeds) and insufficient for writes.
-  For unattended releases, replace it with a granular token that has the
-  **Automation** permission (bypasses OTP by design).
+- **npm publish needs an OTP — in CI it doesn't.** The account has 2FA enabled
+  for writes, so a *manual* `npm publish` (or an agent) fails with 401
+  "You must provide a one-time pass" unless `--otp=<code>` is passed. The
+  `~/.npmrc` token is enough for reads (`whoami` succeeds) and not for writes.
+  The automated path needs none of this: OIDC Trusted Publishing is not a token
+  and is not subject to the OTP prompt. Once the Trusted Publisher is configured
+  on both packages, `~/.npmrc` should hold no publish token at all.
 - **The registry is eventually consistent.** Right after a publish the plain
   `GET /@luisarg/<pkg>` can still serve metadata without the new version;
   `npm view <pkg>@<version>` or a cache-busted request is authoritative.

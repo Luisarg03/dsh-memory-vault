@@ -1,0 +1,101 @@
+# Security checks that do not belong in the build/test path: dependency
+# vulnerabilities, lockfile integrity, accidental secrets in the source tree,
+# and a review of dependency changes on pull requests.
+#
+# The three package.json files this repo publishes are installed by DSH users,
+# so a malicious or compromised transitive dependency ships to them. pnpm
+# already blocks dependency postinstall scripts (allowBuilds: {} in
+# pnpm-workspace.yaml) and refuses exotic subdeps by default; this workflow
+# covers the part that cannot be configured away.
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so a CVE published against an unchanged dependency still surfaces.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies (high and above)
+        run: pnpm audit --audit-level=high
+
+      # The lockfile is the supply-chain boundary: if it does not match the
+      # manifests, `--frozen-lockfile` would already have failed above, but a
+      # lockfile that was hand-edited to add a registry or tarball URL is worth
+      # failing loudly for.
+      - name: Lockfile integrity
+        run: |
+          if grep -nE '^\s+(resolution|tarball):.*(git\+|https?://[^r])' pnpm-lock.yaml | grep -v 'registry.npmjs.org'; then
+            echo "::error::pnpm-lock.yaml resolves a dependency outside registry.npmjs.org"
+            exit 1
+          fi
+          echo "lockfile only resolves from registry.npmjs.org"
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # Defence in depth next to GitHub secret scanning + push protection: the
+      # README documents a hand-run MCP smoke test, which is exactly where a
+      # real token gets pasted by accident.
+      - name: Reject committed credentials
+        run: |
+          # -P (PCRE) so {36} is a real quantifier; these are shaped like the
+          # tokens this project actually uses (npm, GitHub, OpenAI-style, AWS).
+          pattern='npm_[A-Za-z0-9]{36}|gh[pousr]_[A-Za-z0-9]{36,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+          if git grep -nPI "$pattern" -- . ':!pnpm-lock.yaml'; then
+            echo "::error::possible committed credential (see the lines above)"
+            exit 1
+          fi
+          echo "no credential patterns found"
+
+  dependency-review:
+    # Runs only where GitHub can diff a pull request's dependencies.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high

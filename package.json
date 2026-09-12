@@ -12,6 +12,8 @@
     "build": "pnpm -r build && node scripts/bundle-assets.mjs",
     "test": "pnpm -r test",
     "lint": "oxlint .",
+    "release:check": "node scripts/release-check.mjs",
+    "release:bump": "node scripts/release-check.mjs --bump",
     "check:config": "pnpm dsh --dump-config 2>&1 | head -n 100"
   },
   "devDependencies": {

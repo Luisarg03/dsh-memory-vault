@@ -1,0 +1,58 @@
+# Weekly dependency updates, grouped to keep PR noise low.
+#
+# Both npm packages ship to DSH users, and memory-vault-server/requirements.txt
+# is what the launcher installs on a host without uv, so all three manifests are
+# watched. This complements the `security` workflow: Dependabot proposes the
+# fix, the security job proves the tree is clean.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-dev:
+        patterns: ["*"]
+        dependency-type: development
+      npm-prod:
+        patterns: ["*"]
+        dependency-type: production
+
+  - package-ecosystem: npm
+    directory: /packages/memory-mcp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      memory-mcp:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /packages/memory-auto
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      memory-auto:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /memory-vault-server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      server-python:
+        patterns: ["*"]
+
+  # Every action in .github/workflows is pinned to a commit SHA. Dependabot is
+  # what keeps those pins current instead of frozen forever.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
