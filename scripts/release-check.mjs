@@ -77,7 +77,16 @@ if (tag !== undefined) {
   } catch {
     fail(`tag ${tag} does not exist — create it with: git tag -a ${tag} -m "Release ${version}"`)
   }
-  if (type !== 'tag') fail(`tag ${tag} is lightweight; use an annotated tag (git tag -a)`)
+  if (type !== 'tag') {
+    // In a shallow clone the tag arrives as a bare ref without the annotated
+    // tag object, which is easy to misread as "someone made a lightweight tag".
+    const shallow = git('rev-parse', '--is-shallow-repository') === 'true'
+    fail(
+      shallow
+        ? `tag ${tag} has no annotated tag object in this shallow clone — fetch tags (actions/checkout: fetch-tags: true)`
+        : `tag ${tag} is lightweight; use an annotated tag (git tag -a)`,
+    )
+  }
 
   const tagged = git('rev-list', '-n1', tag)
   const head = git('rev-parse', 'HEAD')
