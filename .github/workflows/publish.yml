@@ -47,13 +47,18 @@ jobs:
       # Node 24 ships npm >= 11.5.1, which Trusted Publishing needs. Do not
       # downgrade to Node 22 and `npm install -g npm@latest`: that replaces the
       # running npm process and dies with a missing-module error.
+      #
+      # NO registry-url here: setup-node writes a .npmrc and exports a
+      # placeholder NODE_AUTH_TOKEN when it is set, and npm takes that token
+      # path instead of the OIDC exchange. npm defaults to registry.npmjs.org
+      # anyway, and the Preflight OIDC step below fails if that var reappears.
+      #
       # package-manager-cache: false keeps a cache-poisoning path out of the
       # release job.
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Setup uv
