@@ -30,7 +30,7 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "test": "vitest run --passWithNoTests",
-    "prepare": "tsdown && node ../../scripts/bundle-assets.mjs"
+    "prepare": "tsdown"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.1",
