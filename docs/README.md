@@ -22,6 +22,11 @@ stack: persistent OKF memory for [DeepSeek Harness](https://deepseek-harness.git
 | `memory-vault/` | Starter vault: OKF templates + type registry + tag vocabulary | [memory-vault/README.md](../memory-vault/README.md) |
 | `scripts/digest_session.py` | Optional standalone digest CLI (not used by the plugins) | — |
 
+## Releasing
+
+- [releasing.md](releasing.md) — version tags (`v0.1.0` … `v0.1.2`), the publish
+  procedure and the npm `gitHead` ↔ tag check
+
 ## Design notes
 
 - Paths are env-driven, never hardcoded: `DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`,

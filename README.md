@@ -230,6 +230,7 @@ Patch replaces `config` wholesale — it does not merge.
 ## Docs
 
 - [`docs/`](docs/README.md) — public documentation (architecture + diagrams)
+- [Releasing & version tags](docs/releasing.md) — which commit each `v*` tag maps to
 - [Your first plugin](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/)
 - [Build a tool](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/tool)
 - [Plugin configuration](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/config)
