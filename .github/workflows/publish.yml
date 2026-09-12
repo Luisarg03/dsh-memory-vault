@@ -119,6 +119,10 @@ jobs:
           mkdir -p dist-tarballs
           pnpm --filter @luisarg/memory-mcp pack --pack-destination dist-tarballs
           pnpm --filter @luisarg/memory-auto pack --pack-destination dist-tarballs
+          # Fail here rather than at publish time if pnpm ever ignores the
+          # destination: an empty publish step is hard to read in the log.
+          ls -l dist-tarballs
+          test "$(ls dist-tarballs/*.tgz | wc -l)" -eq 2
 
       # The tarball is the artifact users install: no vault data, no .venv,
       # no __pycache__, and the bundled server must actually be in there.
@@ -132,9 +136,12 @@ jobs:
         env:
           NPM_CONFIG_PROVENANCE: "true"
         run: |
+          set -euo pipefail
           shopt -s nullglob
           published=0
-          for tgz in dist-tarballs/*.tgz; do
+          # Absolute paths: npm reads a bare relative path as a package spec and
+          # tries `git ls-remote ssh://git@github.com/<path>.git`.
+          for tgz in "$PWD"/dist-tarballs/*.tgz; do
             name="$(tar -xzOf "$tgz" package/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).name))')"
             version="$(tar -xzOf "$tgz" package/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')"
 
