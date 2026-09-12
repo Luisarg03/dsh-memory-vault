@@ -146,6 +146,11 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           published=0
+          echo "node $(node --version) / npm $(npm --version)"
+          echo "registry: $(npm config get registry)"
+          echo "project .npmrc:"; cat .npmrc 2>/dev/null || echo "(none)"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
           # Absolute paths: npm reads a bare relative path as a package spec and
           # tries `git ls-remote ssh://git@github.com/<path>.git`.
           for tgz in "$PWD"/dist-tarballs/*.tgz; do
