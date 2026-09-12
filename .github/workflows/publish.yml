@@ -170,11 +170,18 @@ jobs:
       - name: Publish to npm (OIDC + provenance)
         env:
           NPM_CONFIG_PROVENANCE: "true"
+          # npm logs the OIDC decision at silly level ("oidc Skipped because…"),
+          # which is the only place the real reason for ENEEDAUTH shows up.
+          NPM_CONFIG_LOGLEVEL: silly
         run: |
           set -euo pipefail
           echo "node $(node --version) / npm $(npm --version)"
           echo "registry: $(npm config get registry)"
+          # npm's oidc() requires GITHUB_ACTIONS plus BOTH of these; missing the
+          # second one makes it return early, which surfaces as ENEEDAUTH.
+          echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS:-unset}"
           echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
           echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
           for dir in packages/memory-mcp packages/memory-auto; do
             name="$(node -p "require('./$dir/package.json').name")"
@@ -186,12 +193,14 @@ jobs:
             fi
 
             echo "::group::npm publish $name@$version"
-            if (cd "$dir" && npm publish --access public --ignore-scripts); then
+            if (cd "$dir" && npm publish --access public --ignore-scripts 2>&1 | tee /tmp/npm-publish.log); then
+              grep -iE "oidc|provenance|attestation" /tmp/npm-publish.log | head -20 || true
               echo "::endgroup::"
             else
-              status=$?
+              status=${PIPESTATUS[0]}
               echo "::endgroup::"
-              echo "::error::npm publish $name@$version failed (exit $status). A 404 or ENEEDAUTH here means the Trusted Publisher config on npmjs.com does not match this repo/workflow/environment, or the package does not exist yet (OIDC cannot create a brand-new package — publish its first version manually)."
+              grep -iE "oidc|provenance|id-token|Skipped because" /tmp/npm-publish.log | head -20 || true
+              echo "::error::npm publish $name@$version failed (exit $status). Check the oidc lines above: 'Skipped because incorrect permissions' means GITHUB_ACTIONS/ACTIONS_ID_TOKEN_REQUEST_TOKEN were missing; 'Failed token exchange' means the npm-side Trusted Publisher did not match."
               exit $status
             fi
           done
