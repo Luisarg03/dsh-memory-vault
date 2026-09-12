@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
-import { PACKAGES, ROOT, packageVersions, tagProblems, versionProblems } from './release-lib.mjs'
+import { PACKAGES, ROOT, packageVersions, remoteTagIsAnnotated, tagProblems, versionProblems } from './release-lib.mjs'
 
 const argv = process.argv.slice(2)
 const arg = (name) => {
@@ -70,22 +70,31 @@ if (tag !== undefined) {
   const tagIssues = tagProblems(tag, version)
   if (tagIssues.length) fail(tagIssues.join('\n  '))
 
-  // The tag must exist, be annotated, and be reachable from HEAD.
-  let type
-  try {
-    type = git('cat-file', '-t', tag)
-  } catch {
-    fail(`tag ${tag} does not exist — create it with: git tag -a ${tag} -m "Release ${version}"`)
+  // The tag must exist and be annotated. Ask the remote, not the clone: a
+  // shallow CI checkout can hold the tag ref without the annotated tag object,
+  // which would look like a lightweight tag and fail a valid release.
+  const annotated = remoteTagIsAnnotated(ROOT, tag, (cwd, ...args) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim(),
+  )
+  if (annotated === false) {
+    fail(`tag ${tag} is lightweight; use an annotated tag (git tag -a)`)
   }
-  if (type !== 'tag') {
-    // In a shallow clone the tag arrives as a bare ref without the annotated
-    // tag object, which is easy to misread as "someone made a lightweight tag".
-    const shallow = git('rev-parse', '--is-shallow-repository') === 'true'
-    fail(
-      shallow
-        ? `tag ${tag} has no annotated tag object in this shallow clone — fetch tags (actions/checkout: fetch-tags: true)`
-        : `tag ${tag} is lightweight; use an annotated tag (git tag -a)`,
-    )
+  if (annotated === null) {
+    // No origin to ask (local-only clone): fall back to the local object type.
+    let type
+    try {
+      type = git('cat-file', '-t', tag)
+    } catch {
+      fail(`tag ${tag} does not exist — create it with: git tag -a ${tag} -m "Release ${version}"`)
+    }
+    if (type !== 'tag') {
+      const shallow = git('rev-parse', '--is-shallow-repository') === 'true'
+      fail(
+        shallow
+          ? `tag ${tag} has no annotated tag object in this shallow clone — fetch tags (actions/checkout: fetch-tags: true)`
+          : `tag ${tag} is lightweight; use an annotated tag (git tag -a)`,
+      )
+    }
   }
 
   const tagged = git('rev-list', '-n1', tag)
