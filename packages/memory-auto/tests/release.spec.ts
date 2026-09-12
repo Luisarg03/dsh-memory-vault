@@ -144,7 +144,9 @@ describe('bundle-assets call sites', () => {
   // the script still serializes if something calls it twice (the lock).
   it('is invoked only by the root build, not by each package', () => {
     const rootScripts = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts
-    expect(rootScripts.build).toContain('bundle-assets.mjs')
+    // The root build is the single call site, through its own `bundle` script.
+    expect(rootScripts.build).toContain('pnpm bundle')
+    expect(rootScripts.bundle).toContain('bundle-assets.mjs')
 
     for (const pkg of PACKAGES) {
       const scripts = JSON.parse(readFileSync(join(ROOT, pkg, 'package.json'), 'utf8')).scripts
@@ -208,6 +210,10 @@ describe('workflow wiring', () => {
     expect(text).toContain('id-token: write')
     expect(text).toContain('scripts/release-check.mjs')
     expect(text).toContain('scripts/check-tarball.mjs')
+    // `pnpm -r build` does NOT run the root build, so the bundling step must be
+    // explicit. Without it the tarballs ship 8 files and no server — which the
+    // tarball guard then catches, after a wasted run.
+    expect(text).toContain('pnpm bundle')
     // Every action must be pinned to a 40-char SHA, never a moving tag.
     for (const line of text.split('\n').filter((l) => l.includes('uses:'))) {
       expect(line).toMatch(/uses:\s+\S+@[0-9a-f]{40}/)
