@@ -74,4 +74,6 @@ along with the next release tag).
   not a moved tag.
 - **`gh` CLI auth is currently invalid** on this machine (`gh api` → 401), so
   GitHub Releases cannot be created from here until `gh auth login`.
-  Tags are plain git refs and push without GitHub auth.
+  Tags are plain git refs and push without GitHub auth. The job-logs API is
+  admin-only, so with an invalid token a red CI run cannot be diagnosed from
+  here either (`/actions/jobs/<id>/logs` → 403).
