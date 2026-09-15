@@ -38,16 +38,25 @@ Environment variables used at load time: `DSH_MEMORY_PATH`,
 
 ## Behavior
 
-- `session.created` — registers the session (project name resolution).
-- `session.disposed` / dispose path — post-session digest of the transcript.
-- `agent/status` idle — auto-capture gate: skips sessions without activity or
-  with a checkpoint already delivered.
-- `tool.execute.after`-style event tracking — detects `git commit*` and queues
-  a commit checkpoint prompt for the running agent.
-- `experimental.session.compacting` — pre-compaction capture (always fires when
-  there is activity).
-- `agent/pre-step` — delivers queued checkpoint prompts (the agent writes
-  entries with the `store_*` MCP tools).
+- `session/created` — registers the session and resolves the project name
+  (`openspec/` present → directory basename; else `package.json` name; else
+  `pyproject.toml` `[project].name`; else first `#` heading of `README.md`;
+  else directory basename).
+- `session/disposed` — digests the transcript, skipping sessions with no
+  activity. A dispose-time `ctx.effect` batch-digests any session still
+  pending, using the tracked activity summary as a stand-in transcript.
+- `agent/status` with status `idle` — runs the auto-capture gate
+  (`idleCheckpoint`): skips sessions without activity or already delivered, and
+  on the first idle of a session also digests the tracked activity summary.
+- `session/event` — tracks activity and queues checkpoints:
+  - `tool/call` (also accepted as `tool_call`) whose `args.command` matches
+    `git commit` queues a commit checkpoint.
+  - `compaction/start` queues a pre-compaction checkpoint (fires whenever there
+    is activity, even if one was already delivered).
+  - `user/message` and `assistant/message` are recorded as tracked activity.
+- `agent/pre-step` — delivers the queued checkpoint by pushing it onto
+  `payload.context` (or `payload.messages`), and the agent writes entries with
+  the `store_*` MCP tools.
 
 Extraction failures are retried with bounded backoff and logged; a failed
 digest never takes the agent down.

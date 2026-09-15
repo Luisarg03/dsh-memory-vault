@@ -9,6 +9,7 @@ import {
   chunkTranscript,
   compactingCheckpoint,
   createSessionState,
+  EXTRACTABLE_TYPES,
   idleCheckpoint,
   isGitCommit,
   isSupportedVersion,
@@ -100,6 +101,31 @@ describe('buildCheckpointPrompt', () => {
     expect(p).toContain('`dsh-memory-vault`')
     expect(p).toContain('fixed store.py path resolution')
     expect(p).toContain('`store_*` MCP tools')
+  })
+
+  it('defines every entry type and how to shape content', () => {
+    // The agents writing checkpoints get the same vocabulary the extraction
+    // model gets; without it they were told to write entries never defined.
+    const p = buildCheckpointPrompt(createSessionState('p'), 'did things')
+    for (const t of EXTRACTABLE_TYPES) {
+      expect(p).toContain(`**${t}**`)
+    }
+    expect(p).toContain('single paragraph')
+    expect(p).toContain('lowercase-kebab')
+    expect(p).toContain('high-signal')
+  })
+})
+
+describe('checkpoint and extraction prompts agree', () => {
+  it('share one entry-type vocabulary', () => {
+    const checkpoint = buildCheckpointPrompt(createSessionState('p'), 'a')
+    const commit = buildCommitCheckpointPrompt(createSessionState('p'))
+    const { system } = buildExtractionPrompt('p', 't')
+    for (const t of EXTRACTABLE_TYPES) {
+      expect(checkpoint).toContain(`**${t}**`)
+      expect(commit).toContain(`**${t}**`)
+      expect(system).toContain(`**${t}**`)
+    }
   })
 })
 
