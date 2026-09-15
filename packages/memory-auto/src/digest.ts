@@ -259,7 +259,9 @@ export async function writeEntries(client: McpClient, project: string, entries: 
         content: e.content,
         ...(e.description ? { description: e.description } : {}),
         tags: e.tags,
-        confidence: e.confidence,
+        // Only store_fact accepts and persists confidence. Sending it for every
+        // type silently discarded it, so send it where it actually lands.
+        ...(e.entry_type === 'fact' ? { confidence: e.confidence } : {}),
         ...(e.openspec_change_id ? { openspec_change_id: e.openspec_change_id } : {}),
       })
       upserted += 1

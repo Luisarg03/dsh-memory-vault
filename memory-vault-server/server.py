@@ -1,8 +1,13 @@
 """MCP server exposing memory store tools via the Model Context Protocol.
 
-Eight tools (per openspec/specs/memory-mcp-server/spec.md):
+Ten tools (per openspec/specs/memory-mcp-server/spec.md):
     search_memory, store_decision, store_fact, store_learning,
-    store_convention, store_profile, export_memories, get_profile, ping.
+    store_convention, store_profile, store_source, export_memories,
+    get_profile, ping.
+
+Note: `type-registry.yaml` also declares `context` and `idea`. They are valid
+`entries.entry_type` values and legal filters here, but no `store_*` tool
+creates them — nothing writes them today.
 
 All reads are explicit (no background polling). Server validates storage
 accessibility at startup.
@@ -190,7 +195,13 @@ def _tool_definitions() -> list[Tool]:
     return [
         Tool(
             name="search_memory",
-            description="Search memory entries across projects. Omit project to search all projects.",
+            description=(
+                "Search memory entries across projects. Omit project to search all projects. "
+                "The query is tokenized and OR-matched (any term hits), ranked by relevance. "
+                "Tags are OR-matched too: passing ['ci','release'] returns entries with either tag. "
+                "Filters narrow the result set; at most 50 entries are returned. "
+                "Source entries are excluded unless entry_type='source' with no other filter."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -203,78 +214,143 @@ def _tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="store_decision",
-            description="Store a decision entry",
+            description=(
+                "Store a decision: an architectural or design choice that was made and why. "
+                "Deduplicated by content hash, so re-storing the same text updates instead of "
+                "duplicating."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project", "content"],
                 "properties": {
                     "project": {"type": "string"},
-                    "content": {"type": "string"},
-                    "description": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "content": {
+                        "type": "string",
+                        "description": "One paragraph, no headings or bullet lists.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "One-sentence queryable summary; derived from content if omitted.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lowercase-kebab tags, e.g. architecture/python/testing.",
+                    },
                     "openspec_change_id": {"type": "string"},
                 },
             },
         ),
         Tool(
             name="store_fact",
-            description="Store a fact entry",
+            description=(
+                "Store a fact: a stable, verifiable statement about the project (version, "
+                "constraint, path, endpoint). Deduplicated by content hash. Prefer one atomic "
+                "fact per call over a bundle of several."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project", "content"],
                 "properties": {
                     "project": {"type": "string"},
-                    "content": {"type": "string"},
-                    "description": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "content": {
+                        "type": "string",
+                        "description": "One paragraph, no headings or bullet lists.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "One-sentence queryable summary; derived from content if omitted.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lowercase-kebab tags, e.g. architecture/python/testing.",
+                    },
                     "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
                 },
             },
         ),
         Tool(
             name="store_learning",
-            description="Store a learning entry",
+            description=(
+                "Store a learning: a non-obvious lesson, debugging insight, or solution found — "
+                "something that cost effort and would otherwise be rediscovered. Deduplicated by "
+                "content hash."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project", "content"],
                 "properties": {
                     "project": {"type": "string"},
-                    "content": {"type": "string"},
-                    "description": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "content": {
+                        "type": "string",
+                        "description": "One paragraph, no headings or bullet lists.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "One-sentence queryable summary; derived from content if omitted.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lowercase-kebab tags, e.g. architecture/python/testing.",
+                    },
                 },
             },
         ),
         Tool(
             name="store_convention",
-            description="Store a convention entry",
+            description=(
+                "Store a convention: an agreed style rule, naming pattern, or coding standard. "
+                "Deduplicated by content hash."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project", "content"],
                 "properties": {
                     "project": {"type": "string"},
-                    "content": {"type": "string"},
-                    "description": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "content": {
+                        "type": "string",
+                        "description": "One paragraph, no headings or bullet lists.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "One-sentence queryable summary; derived from content if omitted.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lowercase-kebab tags, e.g. architecture/python/testing.",
+                    },
                 },
             },
         ),
         Tool(
             name="store_profile",
-            description="Store or update a user profile entry for a project",
+            description=(
+                "Replace the tech profile for a project. One profile per project: the content "
+                "overwrites the previous one, it does not append. Pass the complete profile text."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project", "content"],
                 "properties": {
                     "project": {"type": "string"},
-                    "content": {"type": "string"},
+                    "content": {
+                        "type": "string",
+                        "description": "The full profile — replaces the stored one.",
+                    },
                     "tags": {"type": "array", "items": {"type": "string"}},
                 },
             },
         ),
         Tool(
             name="store_source",
-            description="Store a source reference (article, transcript, PDF, video, link)",
+            description=(
+                "Store an external source reference (article, transcript, PDF, video, link) under "
+                "raw/. Immutable: a later store with the same URL returns the existing entry, and "
+                "reusing a title slug with different content is rejected."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["url", "title", "description", "source_kind"],
@@ -294,7 +370,10 @@ def _tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="export_memories",
-            description="Export all memory entries for a project (no limit)",
+            description=(
+                "Export every stored entry for one project, newest first, with no result limit. "
+                "Use for a full project dump, not for lookups — search_memory is cheaper."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project"],
@@ -306,7 +385,11 @@ def _tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="get_profile",
-            description="Retrieve the global tech profile for a project",
+            description=(
+                "Retrieve the stored tech profile for a project. Returns profile entries by "
+                "default; pass entry_type to query another type instead (then it is a "
+                "most-recent-first lookup capped at 10)."
+            ),
             inputSchema={
                 "type": "object",
                 "required": ["project"],

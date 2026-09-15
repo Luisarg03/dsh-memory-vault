@@ -770,12 +770,15 @@ class MemoryStore:
         project: str,
         entry_type: str | None = None,
     ) -> list[dict]:
-        """Retrieve profile entries for a project."""
-        sql = "SELECT * FROM entries WHERE project = ?"
-        params: list = [project]
-        if entry_type:
-            sql += " AND entry_type = ?"
-            params.append(entry_type)
+        """Retrieve the profile for a project.
+
+        Defaults to ``profile`` entries: the tool is named get_profile, so an
+        unfiltered call returning the 10 most recent rows of any type was a
+        silent wrong answer. Pass ``entry_type`` to use it as a recency query.
+        """
+        entry_type = entry_type or "profile"
+        sql = "SELECT * FROM entries WHERE project = ? AND entry_type = ?"
+        params: list = [project, entry_type]
         sql += " ORDER BY updated_at DESC LIMIT 10"
         rows = self.db.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
