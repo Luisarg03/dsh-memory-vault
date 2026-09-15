@@ -1,3 +1,17 @@
+/**
+ * Harness wiring for `memory-auto`. Registers exactly these hooks:
+ *
+ *   - `session/created`        resolve the project name for the session
+ *   - `session/disposed`       digest the transcript
+ *   - `agent/status` (idle)    auto-capture gate
+ *   - `session/event`          activity tracking; `tool/call` with a
+ *                              `git commit` command and `compaction/start`
+ *                              queue checkpoints
+ *   - `agent/pre-step`         deliver the queued checkpoint to the agent
+ *   - `ctx.effect` dispose     batch-digest sessions still pending
+ *
+ * The agent writes the entries; this plugin only prompts it.
+ */
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'

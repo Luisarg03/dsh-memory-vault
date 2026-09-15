@@ -97,3 +97,22 @@ export function tagProblems(tag, version) {
   }
   return problems
 }
+
+/**
+ * Is `tag` an annotated tag in the repository at `cwd`'s `origin`? Asks the
+ * remote rather than the clone: a shallow CI checkout can hold the tag ref
+ * without the annotated tag object, which would look like a lightweight tag and
+ * fail a valid release. On a remote, an annotated tag appears twice —
+ * `refs/tags/X` and the peeled `refs/tags/X^{}`. Returns null when there is no
+ * origin to ask, so callers can fall back to the local object type.
+ */
+export function remoteTagIsAnnotated(cwd, tag, git) {
+  let out
+  try {
+    out = git(cwd, 'ls-remote', '--tags', 'origin', `refs/tags/${tag}*`)
+  } catch {
+    return null
+  }
+  if (!out) return null
+  return out.split('\n').some((line) => line.endsWith(`refs/tags/${tag}^{}`))
+}

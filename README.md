@@ -142,7 +142,7 @@ second stdio MCP client over the same server and vault — `~/.config/opencode/o
     "type": "local",
     "command": ["uv", "run", "--directory", "<repo>/memory-vault-server", "python", "server.py"],
     "enabled": true,
-    "environment": { "MEMORY_PATH": "/home/hiro03/.memories" }
+    "environment": { "MEMORY_PATH": "<absolute path to your vault>" }
   }
 }
 ```

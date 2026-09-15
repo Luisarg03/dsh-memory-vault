@@ -1,16 +1,9 @@
 /**
  * DSH memory plugin (adapted from the OpenCode memory plugin).
  *
- * Implements session lifecycle hooks:
- *   - session.created: project name resolution only (no memory auto-injection)
- *   - session.idle: auto-capture gate (skip if no activity or already delivered)
- *   - tool.execute.after: detect `git commit*` and queue a checkpoint
- *   - tui.prompt.append: deliver queued checkpoint on next user message
- *   - experimental.session.compacting: pre-compaction capture (always fires)
- *   - session.end: invoke post-session digest
- *   - /brain search|recall|profile: opt-in reads via MCP (2s health check)
- *   - /checkpoint: manual structured review
- *   - OpenCode version guard: warn on < 1.17.10, disable gracefully
+ * Pure helpers only: prompt builders, transcript chunking, JSON repair and
+ * entry validation. No I/O and no harness wiring — `plugin.ts` owns the hook
+ * registration and `digest.ts` owns the LLM call and vault writes.
  */
 
 import { readFile } from "node:fs/promises";
@@ -23,6 +16,47 @@ export const MIN_OPENCODE_VERSION = "1.17.10";
 export const MCP_UNREACHABLE =
   "> ⚠️ Memory server unreachable — search cannot be completed.";
 const CHECKPOINT_MARKER = "[memory-checkpoint]";
+
+/**
+ * Entry types the vault's MCP server can store via `store_*` tools. The
+ * extraction prompt is restricted to these so every produced entry has a
+ * write path (no `idea`/`context`/`source` — those have no store tool).
+ */
+export const EXTRACTABLE_TYPES = ['decision', 'fact', 'learning', 'convention'] as const
+export type ExtractableType = (typeof EXTRACTABLE_TYPES)[number]
+
+/**
+ * Shared entry vocabulary: one definition list, used by BOTH the internal
+ * extraction prompt and the agent-facing checkpoint prompt. Keeping one source
+ * stops the two from drifting, which is how the checkpoint prompt ended up
+ * asking agents to write entries it never defined.
+ */
+const ENTRY_TYPE_GLOSS: Record<ExtractableType, string> = {
+  decision: "architectural or design choices that were made",
+  fact: "stable, verifiable statements about the project (versions, constraints)",
+  learning: "non-obvious lessons, debugging insights, or solutions found",
+  convention: "style rules, naming patterns, coding conventions agreed",
+}
+
+/** Content shape, quoted by both prompts. */
+const ENTRY_CONTENT_RULE =
+  "a single paragraph — no headings, no bullet lists, no markdown structure"
+
+/**
+ * What "notable" means, shared by both prompts. The extraction model is told
+ * these rules; the agent writing checkpoints needs them just as much.
+ */
+const ENTRY_SELECTION_RULES = [
+  "Skip trivia (greetings, \"ok\", \"thanks\", restating the request).",
+  "Prefer fewer, high-signal entries over many weak ones.",
+  "Do not record anything you cannot ground in this session's activity.",
+] as const
+
+/** Entry-type clauses as bullet lines, in EXTRACTABLE_TYPES order. */
+function entryTypeBullets(): string[] {
+  return EXTRACTABLE_TYPES.map((t) => `- **${t}**: ${ENTRY_TYPE_GLOSS[t]}.`)
+}
+
 
 // ── Version guard ────────────────────────────────────────────────────────
 
@@ -122,7 +156,13 @@ export function buildCheckpointPrompt(state: SessionState, activitySummary: stri
     "Tracked activity:",
     activitySummary.trim() || "(none recorded)",
     "",
-    "Write OKF entries for any notable decisions, facts, or learnings using the `store_*` MCP tools.",
+    "Write OKF entries for anything notable using the `store_*` MCP tools.",
+    "Entry types:",
+    ...entryTypeBullets(),
+    "",
+    `Set \`content\` to ${ENTRY_CONTENT_RULE}, and \`description\` to a one-sentence summary.`,
+    "Tag with lowercase-kebab tags (at least one, e.g. architecture/python/testing).",
+    ...ENTRY_SELECTION_RULES,
     "If nothing is notable, say so explicitly and exit.",
   ].join("\n");
 }
@@ -165,20 +205,18 @@ export function buildCommitCheckpointPrompt(state: SessionState): string {
   return [
     `${CHECKPOINT_MARKER} Memory capture after \`git commit\` in project \`${state.project}\`.`,
     "",
-    "Review the staged/committed changes and write OKF entries for any notable decisions, facts, or learnings.",
+    "Review the staged/committed changes and write OKF entries through the `store_*` MCP tools.",
+    "Entry types:",
+    ...entryTypeBullets(),
+    "",
+    `Set \`content\` to ${ENTRY_CONTENT_RULE}, and \`description\` to a one-sentence summary.`,
+    "Tag with lowercase-kebab tags (at least one, e.g. architecture/python/testing).",
+    ...ENTRY_SELECTION_RULES,
     "If nothing is notable, say so explicitly and exit.",
   ].join("\n");
 }
 
 // ── In-process session digest (ctx.llm) ──────────────────────────────────
-
-/**
- * Entry types the vault's MCP server can store via `store_*` tools. The
- * extraction prompt is restricted to these so every produced entry has a
- * write path (no `idea`/`context`/`source` — those have no store tool).
- */
-export const EXTRACTABLE_TYPES = ['decision', 'fact', 'learning', 'convention'] as const
-export type ExtractableType = (typeof EXTRACTABLE_TYPES)[number]
 
 /** One validated OKF entry ready to be stored through the vault server. */
 export interface ValidEntry {
@@ -217,23 +255,18 @@ export function buildExtractionPrompt(
   }
   sysParts.push(
     `For the transcript of project \`${project}\`, identify:`,
-    '- **Decisions**: architectural or design choices that were made.',
-    '- **Facts**: stable, verifiable statements about the project (versions, conventions, constraints).',
-    '- **Learnings**: non-obvious lessons, debugging insights, or solutions found.',
-    '- **Conventions**: style rules, naming patterns, coding conventions agreed.',
+    ...entryTypeBullets(),
     '',
     'Return a JSON array. Each element must have exactly:',
-    '  - "entry_type": one of "decision" | "fact" | "learning" | "convention"',
-    '  - "content": a single-paragraph statement (no headings, no lists)',
+    `  - "entry_type": one of ${EXTRACTABLE_TYPES.map((t) => `"${t}"`).join(' | ')}`,
+    `  - "content": ${ENTRY_CONTENT_RULE}`,
     '  - "description": a one-sentence summary of `content` (queryable)',
     '  - "tags": an array of lowercase-kebab tags (never empty if possible, at least 1 like architecture/python/testing)',
     '  - "confidence": a number 0.0-1.0',
     '  - "openspec_change_id": (optional) the change slug if the transcript names it',
     '',
     'Rules:',
-    '- Skip trivial exchanges (greetings, "ok", "thanks", or anything with no project knowledge).',
-    '- Prefer fewer, higher-signal entries over many weak ones.',
-    '- Do not include anything not present in the transcript.',
+    ...ENTRY_SELECTION_RULES.map((r) => `- ${r}`),
     '',
     'Return only the JSON array. No prose, no markdown fences.',
   )
