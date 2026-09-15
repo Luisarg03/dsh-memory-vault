@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   PACKAGES,
@@ -154,6 +155,39 @@ describe('bundle-assets call sites', () => {
       for (const [name, cmd] of Object.entries(scripts)) {
         expect(cmd, `${pkg}:${name}`).not.toContain('bundle-assets')
       }
+    }
+  })
+})
+
+describe('published entry points', () => {
+  // tsdown 0.23 began emitting index.mjs + index.d.mts (fixedExtension defaults
+  // to true on platform "node"), while package.json kept pointing at
+  // index.js + index.d.ts. Every check stayed green because nothing ever loaded
+  // the built package; the published plugin was simply unresolvable. Build first
+  // (pnpm test runs after pnpm -r build in CI), then assert the paths are real.
+  const readPkg = (dir) => JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8'))
+
+  it('declares main/exports paths that exist on disk', () => {
+    for (const dir of PACKAGES) {
+      const pkg = readPkg(dir)
+      expect(pkg.type, `${dir} must be ESM so the .js output is a module`).toBe('module')
+      const declared = [pkg.main, pkg.exports['.'].default, pkg.exports['.'].types]
+      for (const rel of declared) {
+        expect(rel, `${dir} declares no path`).toBeTruthy()
+        expect(existsSync(join(ROOT, dir, rel)), `${dir}: ${rel} is missing after build`).toBe(true)
+      }
+    }
+  })
+
+  it('built output is importable and exports the plugin surface', async () => {
+    for (const dir of PACKAGES) {
+      const pkg = readPkg(dir)
+      const mod = await import(pathToFileURL(join(ROOT, dir, pkg.exports['.'].default)).href)
+      expect(Object.keys(mod).sort(), `${dir} export surface changed`).toEqual([
+        'Config',
+        'apply',
+        'name',
+      ])
     }
   })
 })
