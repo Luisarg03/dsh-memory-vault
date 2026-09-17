@@ -48,9 +48,20 @@ describe('memory-mcp bundled skills', () => {
     }
   })
 
+  it('resolves to undefined instead of throwing when a body is unloadable', async () => {
+    const [candidate] = await skillsProvider.list({})
+    if (candidate === undefined) throw new Error('provider listed no candidate')
+
+    // The registry hands `undefined` straight back to its caller, so a throw
+    // here would surface a raw ENOENT as a tool error instead of the skill
+    // simply being gone. A missing directory is the cheapest way to reach it.
+    await expect(
+      skillsProvider.get({ ...candidate, name: 'no-such-skill' }, {}),
+    ).resolves.toBeUndefined()
+  })
+
   it('resolves its assets from the package root, not the cwd', async () => {
     const [candidate] = await skillsProvider.list({})
-
     expect(candidate?.resourceBase).toEqual({
       kind: 'directory',
       path: expect.stringContaining('skills/brain'),

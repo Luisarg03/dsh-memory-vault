@@ -40,6 +40,17 @@ describe('memory-auto bundled skills', () => {
     expect(content).toContain('/checkpoint')
     expect(content).not.toMatch(/ENTRY_TYPE_GLOSS|store_decision/)
   })
+
+  it('resolves to undefined instead of throwing when a body is unloadable', async () => {
+    const [candidate] = await skillsProvider.list({})
+    if (candidate === undefined) throw new Error('provider listed no candidate')
+
+    // See the sibling spec in memory-mcp: `undefined` is the provider contract,
+    // while a throw would reach the caller as a raw ENOENT.
+    await expect(
+      skillsProvider.get({ ...candidate, name: 'no-such-skill' }, {}),
+    ).resolves.toBeUndefined()
+  })
 })
 
 describe('memory-auto skill wiring', () => {

@@ -106,8 +106,13 @@ export const skillsProvider: SkillProvider = {
     }))
   },
 
-  async get(candidate): Promise<SkillDefinition> {
-    const { frontmatter, body } = await loadSkill(candidate.name)
+  async get(candidate): Promise<SkillDefinition | undefined> {
+    // A body that is no longer loadable resolves to `undefined`: the registry
+    // passes that straight back to its caller, while throwing here would
+    // surface a raw ENOENT as a tool error instead of "no longer available".
+    const loaded = await loadSkill(candidate.name).catch(() => undefined)
+    if (loaded === undefined) return undefined
+    const { frontmatter, body } = loaded
     return {
       ...frontmatter,
       path: fileURLToPath(skillUrl(candidate.name)),
