@@ -105,7 +105,7 @@ export async function resolveProjectName(cwd: string): Promise<string> {
   if (existsSync(pyprojectPath)) {
     try {
       const text = await readFile(pyprojectPath, "utf-8");
-      const m = text.match(/\[project\][^\[]*?name\s*=\s*["']([^"']+)["']/);
+      const m = text.match(/\[project\][^[]*?name\s*=\s*["']([^"']+)["']/);
       if (m) return m[1];
     } catch {
       // ignore
