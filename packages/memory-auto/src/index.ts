@@ -1,1 +1,1 @@
-export { apply, Config, name } from './plugin.js'
+export { apply, Config, inject, name } from './plugin.js'

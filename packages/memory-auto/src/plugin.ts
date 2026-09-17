@@ -29,6 +29,7 @@ import {
   type SessionState,
 } from './pure.js'
 import { digestSessionDSM, type DigestConfig } from './digest.js'
+import { skillsProvider } from './skills.js'
 
 export const name = 'memory-auto'
 
@@ -98,6 +99,14 @@ type DSHEvt = any
 type DSHSession = { id: string; events: DSHEvt[]; cwd?: string }
 
 export function apply(ctx: Context, config: Config) {
+  // Registered before the `enabled` gate on purpose: this skill documents the
+  // automatic capture *and* its knobs, which is how a session finds out that
+  // capture is off and how to turn it back on. Injected rather than declared in
+  // `inject` so a deployment without a skill catalog still gets capture.
+  ctx.inject(['skills'], (ctx) => {
+    ctx.skills.registerProvider(() => skillsProvider)
+  })
+
   if (!config.enabled) {
     console.log('[memory-auto] disabled via config')
     return

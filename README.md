@@ -99,6 +99,24 @@ Once installed, the agent can read and write the vault through the
 | "export everything you know about `<project>`" | `mcp__memory__export_memories` |
 | "summarize my profile" | `mcp__memory__get_profile` |
 
+### Bundled skills
+
+Both plugins ship the skills that drive those tools, so a fresh install gets the
+commands without copying anything into a skill directory:
+
+| Command | Ships with | What it does |
+|---|---|---|
+| `/brain` | `memory-mcp` | Reads the vault: topic search, recall by project, profile, full export |
+| `/checkpoint` | `memory-mcp` | Captures the session as `decision`/`fact`/`learning`/`convention` entries, then commits the vault |
+| `/checkpoint-auto` | `memory-auto` | Explains and steers the automatic capture (triggers, `[memory-checkpoint]`, knobs) |
+
+They register at the **bundled** rank, the weakest in DSH's local discovery
+table, so a skill of the same name in `~/.agents/skills`, `.agents/skills` or
+`.dsh/skills` still wins — these are defaults, not a takeover. To override one,
+copy its `SKILL.md` from `packages/*/skills/` into your skill root and edit it;
+the file works in both places because the frontmatter is the single source of
+its name, description and usage guidance.
+
 **Automatic capture** (`memory-auto`): git commits, compactions and session
 ends trigger digests; idle checkpoints capture when there is activity. Digests
 log as `[memory-auto] …` lines in the harness console, and writes land under
@@ -205,8 +223,8 @@ Editable specs live in `docs/diagrams/*.json` (generated with
 ## Repository layout
 
 ```
-packages/memory-mcp/          # cordis bundle: MCP stdio client to the vault
-packages/memory-auto/         # cordis bundle: automatic session digest
+packages/memory-mcp/          # cordis bundle: MCP stdio client to the vault (+ brain, checkpoint skills)
+packages/memory-auto/         # cordis bundle: automatic session digest (+ checkpoint-auto skill)
 memory-vault-server/          # Python MCP server (SQLite + Markdown OKF)
 memory-vault/                 # vault starter (templates + type registry)
 scripts/digest_session.py     # optional standalone digest CLI (not used by the plugins)
