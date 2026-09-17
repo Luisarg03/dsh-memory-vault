@@ -42,19 +42,19 @@ provenance attestation.
 
 ```sh
 # 1. bump both package.json files in lockstep
-pnpm release:bump 0.1.4
+pnpm release:bump 0.1.5
 pnpm -r build && pnpm -r test && pnpm release:check
 
 # 2. merge the bump to main through a PR (the ruleset requires the CI check)
 
 # 3. tag the merged commit and push the tag
-git tag -a v0.1.4 -m "Release 0.1.4" && git push origin v0.1.4
+git tag -a v0.1.5 -m "Release 0.1.5" && git push origin v0.1.5
 ```
 
 Then the workflow takes over:
 
 1. fails fast if npm < 11.5.1 (Trusted Publishing requirement);
-2. `release-check.mjs --tag v0.1.4 --strict` — tag, both package versions and
+2. `release-check.mjs --tag v0.1.5 --strict` — tag, both package versions and
    HEAD must agree, and the tree must be clean;
 3. packs both packages and validates every tarball (`check-tarball.mjs`):
    required bundled files present, no vault data, no build residue;
@@ -82,6 +82,21 @@ Per package on npmjs.com → Settings:
 | Allowed actions | `npm publish` |
 | Publishing access | *Require 2FA and disallow tokens* |
 
+The same setup is scriptable — one call per package (`npm` ≥ 11.5):
+
+```sh
+npm trust github @luisarg/memory-mcp \
+  --file publish.yml --repo Luisarg03/dsh-memory-vault --env release --allow-publish -y
+```
+
+Validate the parameters first with `--dry-run`, which does not prompt. The real
+call needs a one-time password: the account requires 2FA for writes and npm
+treats a trust change as an account operation, so it opens a browser auth flow
+and cannot be completed unattended. A mismatch between these fields and the
+workflow is what the publish job reports as
+`404 ... OIDC token exchange error - package not found` followed by `ENEEDAUTH`
+— the package exists; it is the trust entry that does not match.
+
 The last row is what removes the token: publishing authority flows only through
 the OIDC exchange, and the workflow file is part of what npm verifies. **OIDC
 cannot create a package that does not exist yet** — a brand-new package gets its
@@ -96,7 +111,7 @@ second release onward.
 | `id-token: write` only in the publish job; every other workflow is `contents: read` | `.github/workflows/*` | a compromised CI job minting release credentials |
 | Tag push is the trigger; only admins can push tags | GitHub ruleset | writing to `main` alone cannot publish |
 | `main` requires a PR and the `build-test` check | GitHub ruleset | unreviewed or red code reaching a release |
-| Release job runs without a dependency cache | `publish.yml` (`package-manager-cache: false`) | cache poisoning feeding the published artifact |
+| Release job runs without a dependency cache | `publish.yml` (`package-manager-cache: false`, an input `setup-node` only honours from v7 on) | cache poisoning feeding the published artifact |
 | Tarball contents validated before publish | `scripts/check-tarball.mjs` | vault data or `.venv`/`__pycache__` shipping to users |
 | Actions pinned to commit SHAs, enforced repo-wide | workflows + `sha_pinning_required` | a retagged upstream action running unreviewed code |
 | Secret scanning + push protection, plus a token-pattern grep in CI | GitHub settings + `security.yml` | credentials committed into the repo |
@@ -108,7 +123,9 @@ second release onward.
 | [`v0.1.0`](../../releases/tag/v0.1.0) | 2026-09-03 15:30 | `0.1.0` | `3141e9e` | First publish; scope rename `@dsh-memory` → `@luisarg`. Tarball without `server/` (7 files). Live ~9 h. |
 | [`v0.1.1`](../../releases/tag/v0.1.1) | 2026-09-04 00:38 | `0.1.1` | `a1ccb5f` | Self-contained tarballs (25 files): Python server + vault starter bundled, first-boot bootstrap. Requires `uv`. |
 | [`v0.1.2`](../../releases/tag/v0.1.2) | 2026-09-07 16:32 | `0.1.2` | `930b7f7` | `launcher.mjs` falls back to a pip venv when `uv` is absent (27 files). |
-| [`v0.1.3`](../../releases/tag/v0.1.3) | 2026-09-12 17:35 | `0.1.3` | `9878fce` | SQLite `timeout=30` (a busy lock from the other MCP client surfaced as "corrupt database" at startup) + `UV_CACHE_DIR` default under the OS temp dir (28 files). Current `latest`. |
+| [`v0.1.3`](../../releases/tag/v0.1.3) | 2026-09-12 17:35 | `0.1.3` | `9878fce` | SQLite `timeout=30` (a busy lock from the other MCP client surfaced as "corrupt database" at startup) + `UV_CACHE_DIR` default under the OS temp dir (28 files). |
+| [`v0.1.4`](../../releases/tag/v0.1.4) | 2026-09-17 18:11 | `0.1.4` | `e862b23` | `dist/index.js` kept so the published entry points resolve (29 files). The npm Trusted Publisher was configured for this release; the verify step raced registry propagation and failed the job *after* a successful publish, so it took a second dispatch to create the Release. |
+| [`v0.1.5`](../../releases/tag/v0.1.5) | 2026-09-17 18:53 | `0.1.5` | `6ebbd5f` | Bundled skills: `brain` + `checkpoint` in `memory-mcp`, `checkpoint-auto` in `memory-auto` (31 / 30 files). The verify step now polls the registry, so the release completed in a single dispatch. Current `latest`. |
 
 Untagged on purpose: `3610064` (docs state of 0.1.0, pushed after its publish),
 `861d54b` (central zone `~/.memories`), `1220f71` and the CI/doc commits before
