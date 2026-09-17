@@ -206,19 +206,30 @@ jobs:
             fi
           done
 
-      # The registry is eventually consistent right after a publish, so verify
-      # through the CLI and confirm gitHead is the commit the tag points at —
-      # that is the check docs/releasing.md is built on. On a manual dispatch
-      # GITHUB_SHA is the branch tip, so compare against the tag instead.
+      # The registry is eventually consistent right after a publish: the PUT
+      # answers 202 "being processed" and the version can take minutes to
+      # resolve. Poll before comparing — without the retry a publish that
+      # actually succeeded reports failure here and skips the Release below.
       - name: Verify published artifacts
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           expected="$(git rev-list -n1 "$TAG")"
+          attempts=20
+          delay=15
           for dir in packages/memory-mcp packages/memory-auto; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
-            head="$(npm view "$name@$version" gitHead)"
+            head=""
+            for attempt in $(seq 1 "$attempts"); do
+              # bash -e is on, so a 404 from npm view must not abort the poll.
+              head="$(npm view "$name@$version" gitHead 2>/dev/null || true)"
+              if [ -n "$head" ]; then
+                break
+              fi
+              echo "attempt $attempt/$attempts: $name@$version is not resolvable yet, retrying in ${delay}s"
+              sleep "$delay"
+            done
             echo "$name@$version gitHead=$head (expected $expected)"
             if [ "$head" != "$expected" ]; then
               echo "::error::$name@$version records gitHead $head, expected the commit $TAG points at ($expected)"
