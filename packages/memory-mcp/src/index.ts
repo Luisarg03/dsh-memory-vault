@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
+import { skillsProvider } from './skills.js'
 
 export const name = 'memory-mcp'
 
@@ -53,6 +54,14 @@ function ensureFile(target: string, bundled: string, file: string): boolean {
 }
 
 export function apply(ctx: Context, config: Config) {
+  // Ship the skills that drive the tools this plugin exposes, at the bundled
+  // rank, so a user's own `brain`/`checkpoint` in a skill directory still wins.
+  // Injected rather than declared in the plugin's `inject`: the vault bootstrap
+  // and the MCP client must keep working in a deployment with no skill catalog.
+  ctx.inject(['skills'], (ctx) => {
+    ctx.skills.registerProvider(() => skillsProvider)
+  })
+
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
   const memoryPath = resolveUnderHome(config.memoryPath, 'memory-vault')
 
