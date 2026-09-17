@@ -179,15 +179,21 @@ describe('published entry points', () => {
     }
   })
 
+  /**
+   * The exact published surface, per package: `inject` is how cordis learns a
+   * plugin's required services, so dropping it from the entry quietly turns the
+   * declaration into dead code — memory-auto shipped that way until now.
+   */
+  const EXPORT_SURFACE = {
+    'packages/memory-mcp': ['Config', 'apply', 'name'],
+    'packages/memory-auto': ['Config', 'apply', 'inject', 'name'],
+  }
+
   it('built output is importable and exports the plugin surface', async () => {
     for (const dir of PACKAGES) {
       const pkg = readPkg(dir)
       const mod = await import(pathToFileURL(join(ROOT, dir, pkg.exports['.'].default)).href)
-      expect(Object.keys(mod).sort(), `${dir} export surface changed`).toEqual([
-        'Config',
-        'apply',
-        'name',
-      ])
+      expect(Object.keys(mod).sort(), `${dir} export surface changed`).toEqual(EXPORT_SURFACE[dir])
     }
   })
 })
