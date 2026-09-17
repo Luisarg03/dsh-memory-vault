@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The memory loop — dsh-memory-vault</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; padding: 48px 24px; background: #f8fafc; color: #0f172a;
+         font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1040px; margin: 0 auto; }
+  .eyebrow { font-family: 'Geist Mono', ui-monospace, SFMono-Regular, monospace; font-size: 12px; letter-spacing: 0.16em;
+              text-transform: uppercase; color: #64748b; margin: 0 0 12px; }
+  h1 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+  .subtitle { color: #64748b; font-size: 16px; margin: 0 0 32px; max-width: 62ch; }
+  .diagram { border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; background: #ffffff;
+              padding: 8px; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; }
+  footer { font-family: 'Geist Mono', ui-monospace, SFMono-Regular, monospace; font-size: 12px; color: #94a3b8; margin-top: 24px;
+            padding-top: 12px; border-top: 1px solid rgba(15,23,42,0.12); }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">DSH · MEMORY STACK</p>
+  <h1>The memory loop</h1>
+  <p class="subtitle">One session per lap: recall what is known, work, and write the durable state back.</p>
+  <div class="diagram">
+  <svg viewBox="0 0 1040 740" role="img" aria-labelledby="memory-loop-title memory-loop-desc">
+    <title id="memory-loop-title">The memory loop: one session per lap around the vault</title>
+    <desc id="memory-loop-desc">A five-station ring — Recall, Work, Capture, Digest and Commit — around a central Vault hub. Work advances clockwise; dashed spokes carry durable state from Digest and Commit back into the vault, so the next lap starts from a richer record.</desc>
+    <defs>
+      <marker id="arr-muted" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#64748b"/>
+      </marker>
+      <marker id="arr-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+      </marker>
+    </defs>
+    <rect width="1040" height="740" fill="#f8fafc"/>
+        <path d="M 600.0 113.7 A 240 240 0 0 1 733.8 230.9" fill="none" stroke="#64748b" stroke-width="1.2" marker-end="url(#arr-muted)"/>
+    <path d="M 755.9 296.0 A 240 240 0 0 1 696.0 503.1" fill="none" stroke="#64748b" stroke-width="1.2" marker-end="url(#arr-muted)"/>
+    <path d="M 594.9 568.0 A 240 240 0 0 1 446.2 568.4" fill="none" stroke="#64748b" stroke-width="1.2" marker-end="url(#arr-muted)"/>
+    <path d="M 344.8 504.0 A 240 240 0 0 1 283.9 297.2" fill="none" stroke="#64748b" stroke-width="1.2" marker-end="url(#arr-muted)"/>
+    <path d="M 305.7 232.0 A 240 240 0 0 1 438.9 114.1" fill="none" stroke="#64748b" stroke-width="1.2" marker-end="url(#arr-muted)"/>
+        <path d="M 403.2 504.0 L 478.7 396.9" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arr-soft)"/>
+    <path d="M 372.0 290.0 L 414.3 305.7" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arr-soft)"/>
+        <rect x="409.0" y="419.1" width="64" height="12" rx="2" fill="#f8fafc"/><text x="441.0" y="429.1" fill="#94a3b8" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle" letter-spacing="0.10em">ENTRIES</text>
+        <rect x="440" y="68" width="160" height="64" rx="6" fill="#f8fafc"/>
+    <rect x="440" y="68" width="160" height="64" rx="6" fill="#f8fafc" stroke="#0f172a" stroke-width="1"/>
+    <rect x="668" y="232" width="160" height="64" rx="6" fill="#f8fafc"/>
+    <rect x="668" y="232" width="160" height="64" rx="6" fill="#f8fafc" stroke="#0f172a" stroke-width="1"/>
+    <rect x="580" y="504" width="160" height="64" rx="6" fill="#f8fafc"/>
+    <rect x="580" y="504" width="160" height="64" rx="6" fill="rgba(234,88,12,0.08)" stroke="#ea580c" stroke-width="1.2"/>
+    <rect x="300" y="504" width="160" height="64" rx="6" fill="#f8fafc"/>
+    <rect x="300" y="504" width="160" height="64" rx="6" fill="#f8fafc" stroke="#0f172a" stroke-width="1"/>
+    <rect x="212" y="232" width="160" height="64" rx="6" fill="#f8fafc"/>
+    <rect x="212" y="232" width="160" height="64" rx="6" fill="#f8fafc" stroke="#0f172a" stroke-width="1"/>
+        <text x="520" y="92" fill="#0f172a" font-size="12" font-weight="600" font-family="'Geist', ui-sans-serif, system-ui, sans-serif" text-anchor="middle">Recall</text>
+    <text x="520" y="108" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">the agent asks what is</text>
+    <text x="520" y="120" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">already known</text>
+    <text x="748" y="256" fill="#0f172a" font-size="12" font-weight="600" font-family="'Geist', ui-sans-serif, system-ui, sans-serif" text-anchor="middle">Work</text>
+    <text x="748" y="272" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">decisions, facts and lessons</text>
+    <text x="748" y="284" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">happen</text>
+    <text x="660" y="528" fill="#ea580c" font-size="12" font-weight="600" font-family="'Geist', ui-sans-serif, system-ui, sans-serif" text-anchor="middle">Capture</text>
+    <text x="660" y="544" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">checkpoints fire on commit,</text>
+    <text x="660" y="556" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">compaction, idle</text>
+    <text x="380" y="528" fill="#0f172a" font-size="12" font-weight="600" font-family="'Geist', ui-sans-serif, system-ui, sans-serif" text-anchor="middle">Digest</text>
+    <text x="380" y="544" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">entries extracted in-process</text>
+    <text x="380" y="556" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">via ctx.llm</text>
+    <text x="292" y="256" fill="#0f172a" font-size="12" font-weight="600" font-family="'Geist', ui-sans-serif, system-ui, sans-serif" text-anchor="middle">Commit</text>
+    <text x="292" y="272" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">the vault is a git repo:</text>
+    <text x="292" y="284" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">every pass leaves one</text>
+        <rect x="420" y="288" width="200" height="104" rx="8" fill="#0f172a"/>
+    <text x="520" y="336" fill="#f8fafc" font-size="16" font-weight="600" font-family="'Geist', ui-sans-serif, system-ui, sans-serif" text-anchor="middle">Vault</text>
+    <text x="520" y="356" fill="#cbd5e1" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" text-anchor="middle">Markdown source · FTS5 index</text>
+        <line x1="40" y1="600" x2="1000" y2="600" stroke="rgba(15,23,42,0.12)" stroke-width="0.8"/>
+    <text x="40" y="620" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace" letter-spacing="0.14em">LEGEND</text>
+    <line x1="140" y1="616" x2="184" y2="616" stroke="#64748b" stroke-width="1.2" marker-end="url(#arr-muted)"/>
+    <text x="196" y="620" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace">session advances, one lap per session</text>
+    <line x1="470" y1="616" x2="514" y2="616" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arr-soft)"/>
+    <text x="526" y="620" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace">durable state written back</text>
+    <rect x="760" y="608" width="16" height="12" rx="3" fill="rgba(234,88,12,0.08)" stroke="#ea580c" stroke-width="1.2"/>
+    <text x="786" y="620" fill="#64748b" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, monospace">focal step of the loop</text>
+  </svg>
+  </div>
+  <footer>dsh-memory-vault · generated by the diagram-design skill · skin: dsh-memory-vault profile</footer>
+</div>
+</body>
+</html>

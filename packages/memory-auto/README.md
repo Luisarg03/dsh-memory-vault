@@ -18,8 +18,23 @@ plugin uses the same key DSH is configured with.
 dsh plugin --profile web add @luisarg/memory-auto
 ```
 
-Requires `uv` on PATH (the vault server is spawned with `uv run`) and the
-vault server directory (`memory-vault-server` in this repository).
+Requires the vault server directory (`memory-vault-server` in this repository) and either `uv`
+on PATH or Python ≥3.11: the bundled `launcher.mjs` runs the server with `uv run` and falls back
+to a pip-managed venv (`python3 -m venv` + `pip install -r requirements.txt`) when uv is missing.
+
+## Skills
+
+The package ships one skill, registered as a **bundled** provider (rank 600, the weakest in DSH's
+local discovery table — a same-named skill in a user or project root still wins):
+
+| Command | Source | What it does |
+|---|---|---|
+| `/checkpoint-auto` | `skills/checkpoint-auto/SKILL.md` | Explains and steers the automatic capture: the git-commit, compaction and idle triggers, what an injected `[memory-checkpoint]` prompt means, and the `provider` / `model` / `maxTokens` / `minTranscriptChars` / `enabled` knobs |
+
+It deliberately does **not** restate the entry vocabulary: that lives in `packages/memory-mcp`'s
+`checkpoint` skill and in `src/pure.ts`, which builds the injected prompt so it keeps working with
+no skill loaded. Registration happens before the `enabled` gate — the skill is how a session
+learns that capture is off and how to turn it back on.
 
 ## Configuration
 

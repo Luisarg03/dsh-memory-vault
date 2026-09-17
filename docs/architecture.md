@@ -46,6 +46,43 @@ DeepSeek Harness (web / headless)  ← plugins and services in the profile proce
   `tag-vocabulary.json` (tag normalization). Runtime data (`projects/`,
   `raw/`, `logs/`, `memory.db`) is created on first use and excluded from git.
 
+## Entry surface: tools and skills
+
+![The memory loop](diagrams/memory-loop.png)
+<sub>[Interactive version](diagrams/memory-loop.html)</sub>
+
+The stack has two surfaces, and they are independent of each other:
+
+| Surface | What it is | Who invokes it |
+|---|---|---|
+| **MCP tools** | The server's 10 tools, reached through `memory-mcp` over stdio | The agent, on its own judgement |
+| **Skills** | Markdown instruction sets the plugins register on `ctx.skills` | The agent, or the user typing `/name` |
+
+`memory-mcp` contributes `brain` (read the vault) and `checkpoint` (capture the session);
+`memory-auto` contributes `checkpoint-auto` (what the automatic capture does and how to steer
+it). Each plugin ships its skills as `skills/<name>/SKILL.md` assets and registers a provider:
+
+- `ctx.inject(['skills'], …)` rather than a declared `inject`, so a deployment with no skill
+  catalog still gets the vault bootstrap, the MCP client and the automatic capture;
+- `BUNDLED_SKILL_RANK`, the weakest rank in DSH's local discovery table, so nothing is taken
+  over — a same-named skill in any user or project root still wins.
+
+DSH resolves duplicate skill names by rank, lowest first:
+
+| Rank | Source | Root |
+|---|---|---|
+| 100 / 200 | project | `<project>/.dsh/skills`, `<project>/.agents/skills` |
+| 250 | runtime | `ctx.skills.register()` |
+| 300 | custom | `customSkillDirs` |
+| 400 / 500 | user | `$DSH_HOME/skills`, `~/.agents/skills` |
+| 600 | bundled | skills shipped inside a plugin (this stack) |
+
+The provider parses each shipped `SKILL.md`'s frontmatter with `yaml` — the same dependency the
+harness's own filesystem provider uses — so the file is the single source of its name,
+description and usage guidance, and the same file works copied into a user skill root. A skill
+that is no longer loadable resolves to `undefined`, which the registry hands back to its caller
+as "no longer available" instead of surfacing a raw filesystem error.
+
 ## Session digest pipeline
 
 ![Session digest pipeline](diagrams/session-digest.png?v=2)

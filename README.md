@@ -4,48 +4,41 @@
 ![Cordis 4.0.1](https://img.shields.io/badge/Cordis-4.0.1-6C5CE7)
 ![pnpm 10.15.0](https://img.shields.io/badge/pnpm-10.15.0-F69220?logo=pnpm)
 ![Node.js ≥22.18](https://img.shields.io/badge/Node.js-%E2%89%A522.18-339933?logo=nodedotjs)
-![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
+![TypeScript 7.0](https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript)
 ![Python ≥3.11](https://img.shields.io/badge/Python-%E2%89%A53.11-3776AB?logo=python)
 ![uv 0.11](https://img.shields.io/badge/uv-0.11-0B0B0F?logo=uv)
 ![MCP ≥1.2](https://img.shields.io/badge/MCP-%E2%89%A51.2-7C3AED)
 ![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite)
-![Vitest 3.2](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest)
-![tsdown 0.15](https://img.shields.io/badge/tsdown-0.15-38BDF8)
-![oxlint 1.13](https://img.shields.io/badge/oxlint-1.13-FF6B6B)
+![Vitest 5.0](https://img.shields.io/badge/Vitest-5.0-6E9F18?logo=vitest)
+![tsdown 0.23](https://img.shields.io/badge/tsdown-0.23-38BDF8)
+![oxlint 1.82](https://img.shields.io/badge/oxlint-1.82-FF6B6B)
 
 Persistent OKF memory for [DeepSeek Harness](https://deepseek-harness.github.io/deepseek-harness/) (DSH):
 a Python MCP server (SQLite FTS5 + Markdown), two Cordis plugins (`memory-mcp`, `memory-auto`)
-and a vault starter with templates and a type registry.
+that expose it to the agent as **tools and commands**, and a vault starter with templates and a
+type registry.
 
-![Stack architecture](docs/diagrams/stack.png?v=2)
+![The memory loop](docs/diagrams/memory-loop.png)
 
-![Session digest pipeline](docs/diagrams/session-digest.png?v=2)
+One lap per session: the agent **recalls** what the vault already knows, **works**, the
+checkpoints **capture** what happened, and the digest **commits** the durable state back — so the
+next lap starts from a richer record. Markdown stays the source of truth; SQLite FTS5 is an index
+derived from it.
 
-## Components
+## What an install gives you
 
-| Component | What it does | Bundle |
-|---|---|---|
-| `memory-mcp` | MCP stdio wrapper: connects DSH to the memory vault server | `@luisarg/memory-mcp` |
-| `memory-auto` | Auto memory capture: session digest with commit/compaction checkpoints | `@luisarg/memory-auto` |
-| `memory-vault-server/` | Python MCP server: SQLite FTS5 + Markdown OKF | — |
-| `memory-vault/` | Vault starter: templates + type registry + tag vocabulary | — |
-| `scripts/digest_session.py` | Optional standalone post-session digest (CLI, not used by the plugins) | — |
-
-## Quickstart
-
-```sh
-pnpm install
-pnpm -r build
-
-# local dev with an overlay (paths relative to the repo cwd)
-dsh web --patch ./examples/dev-memory.cordis.yml
-```
+| | |
+|---|---|
+| **10 MCP tools** | `search_memory` · `store_decision` · `store_fact` · `store_learning` · `store_convention` · `store_profile` · `store_source` · `export_memories` · `get_profile` · `ping` |
+| **3 commands** | `/brain` and `/checkpoint` ship with `memory-mcp`; `/checkpoint-auto` ships with `memory-auto` |
+| **Automatic capture** | digests on git commit, compaction and idle — extracted in-process through the harness's own LLM service |
+| **A vault** | OKF bundle with per-type templates, a type registry and a tag vocabulary; runtime data is created on first use |
 
 ## Install
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp@0.1.4 @luisarg/memory-auto@0.1.4
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.5 @luisarg/memory-auto@0.1.5
 
 # 2. launch — first boot installs the vault server + starter under $DSH_HOME
 #    (~/.dsh/memory-vault-server and ~/.dsh/memory-vault) automatically
@@ -55,19 +48,9 @@ dsh web
 dsh --profile web --dump-config | grep -A8 memory
 ```
 
-> `uv` on PATH is recommended but no longer required: the bundled
-> `launcher.mjs` runs the server with `uv run` when uv is present and falls
-> back to a pip-managed venv (`python3 -m venv` + `pip install -r
-> requirements.txt`, first boot needs network) when it is not. The packages
-> are self-contained: they ship the Python vault server and the OKF vault
-> starter, and copy them into place on first boot (existing files are never
-> overwritten; upgrades copy only the missing `launcher.mjs` and
-> `requirements.txt`). The version is pinned because
-> pnpm's default `minimumReleaseAge` (3 days) would otherwise resolve an
-> older release. Paths resolve as: env
-> (`DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`) → `$DSH_HOME/memory-vault(-server)`
-> → profile patch (see [Path resolution](#path-resolution-cwd-independent)).
-> Launch from any directory.
+> The version is pinned because pnpm's default `minimumReleaseAge` (3 days) would otherwise
+> resolve an older release. Upgrades never overwrite existing vault files: they copy only what
+> is missing.
 
 **Developers** (local checkout instead of npm):
 
@@ -75,54 +58,96 @@ dsh --profile web --dump-config | grep -A8 memory
 dsh plugin --profile demo add ./packages/memory-mcp ./packages/memory-auto
 ```
 
-**Offline**: `pnpm --filter @luisarg/memory-mcp pack` and add the `.tgz` files.
+**Offline**: `pnpm --filter @luisarg/memory-mcp pack` and add the `.tgz` files. Installing the
+repo root from GitHub is **not** supported (the root has no `dsh.bundle`; pnpm lacks git
+subdirectory specs) — use npm or the tarball.
 
-Installing the repo root from GitHub is **not** supported (root has no
-`dsh.bundle`; pnpm lacks git subdirectory specs) — use npm or the tarball.
+Releases are published by CI: pushing a `v<version>` tag builds, tests, validates the tarballs
+and publishes both packages to npm with a
+[provenance attestation](https://docs.npmjs.com/generated-provenance-statements), authenticated
+by GitHub OIDC — no publish token exists in this repository or on the maintainer's machine. What
+runs before an artifact ships is in [`docs/releasing.md`](docs/releasing.md).
 
-Releases are published by CI: pushing a `v<version>` tag builds, tests,
-validates the tarballs and publishes both packages to npm with a
-[provenance attestation](https://docs.npmjs.com/generated-provenance-statements),
-authenticated by GitHub OIDC — no publish token exists in this repository or on
-the maintainer's machine. What runs before an artifact ships, and the guardrails
-around it, are in [`docs/releasing.md`](docs/releasing.md#security-layers-around-the-release).
+## Components
 
-## Usage & interaction commands
+| Component | What it does | Bundle |
+|---|---|---|
+| `memory-mcp` | MCP stdio client: spawns the vault server, exposes its tools and the `brain` / `checkpoint` skills | `@luisarg/memory-mcp` |
+| `memory-auto` | Session hooks + in-process digest, and the `checkpoint-auto` skill | `@luisarg/memory-auto` |
+| `memory-vault-server/` | Python MCP server: SQLite FTS5 + Markdown OKF | — |
+| `memory-vault/` | Vault starter: templates + type registry + tag vocabulary | — |
+| `scripts/digest_session.py` | Optional standalone digest CLI (not used by the plugins) | — |
 
-Once installed, the agent can read and write the vault through the
-`mcp__memory__*` tools — just ask it in the chat:
+![Stack architecture](docs/diagrams/stack.png?v=2)
+
+## Use it
+
+### Ask in the chat
+
+The agent reaches the vault through MCP tools (`mcp__memory__*` — the server is named `memory`);
+you do not call them yourself:
 
 | You say | Tool the agent uses |
 |---|---|
-| "search your memory for `<topic>`" | `mcp__memory__search_memory` |
-| "remember this: `<fact/decision>`" | `mcp__memory__store_decision` / `store_fact` / … |
-| "export everything you know about `<project>`" | `mcp__memory__export_memories` |
-| "summarize my profile" | `mcp__memory__get_profile` |
+| "search your memory for `<topic>`" | `search_memory` |
+| "remember this: `<fact/decision>`" | `store_decision` / `store_fact` / … |
+| "export everything you know about `<project>`" | `export_memories` |
+| "summarize my profile" | `get_profile` |
 
 ### Bundled skills
 
-Both plugins ship the skills that drive those tools, so a fresh install gets the
-commands without copying anything into a skill directory:
+Both plugins also ship the commands that drive those tools, so a fresh install gets them without
+copying anything into a skill directory:
 
 | Command | Ships with | What it does |
 |---|---|---|
 | `/brain` | `memory-mcp` | Reads the vault: topic search, recall by project, profile, full export |
 | `/checkpoint` | `memory-mcp` | Captures the session as `decision`/`fact`/`learning`/`convention` entries, then commits the vault |
-| `/checkpoint-auto` | `memory-auto` | Explains and steers the automatic capture (triggers, `[memory-checkpoint]`, knobs) |
+| `/checkpoint-auto` | `memory-auto` | Explains and steers the automatic capture: triggers, the `[memory-checkpoint]` marker, the knobs |
 
-They register at the **bundled** rank, the weakest in DSH's local discovery
-table, so a skill of the same name in `~/.agents/skills`, `.agents/skills` or
-`.dsh/skills` still wins — these are defaults, not a takeover. To override one,
-copy its `SKILL.md` from `packages/*/skills/` into your skill root and edit it;
-the file works in both places because the frontmatter is the single source of
-its name, description and usage guidance.
+They register at DSH's **bundled** rank, the weakest in the local discovery table, so a skill of
+the same name in `~/.agents/skills`, `~/.dsh/skills` or a project's `.agents/skills` still wins —
+these are defaults, not a takeover. To override one, copy its `SKILL.md` out of
+`packages/*/skills/` into your skill root and edit it: the file is the single source of its own
+name, description and usage guidance, so it works in both places.
 
-**Automatic capture** (`memory-auto`): git commits, compactions and session
-ends trigger digests; idle checkpoints capture when there is activity. Digests
-log as `[memory-auto] …` lines in the harness console, and writes land under
-`<vault>/projects/<project>/<type>/` (Markdown) + the SQLite FTS5 index.
+### Automatic capture
 
-**Verify the installation and the stored memory:**
+`memory-auto` triggers digests on git commits, compactions and idle sessions. Digests log as
+`[memory-auto] …` lines in the harness console, and the entries land under
+`<vault>/projects/<project>/<type>/` (Markdown) plus the SQLite FTS5 index. The extraction runs
+**in-process** through `ctx.llm` — the credentials DSH is already configured with — so there is no
+external CLI and no stored key. Set `enabled: false` in the plugin config to turn it off.
+
+## Configuration
+
+DSH does **not** chdir: the launch directory is irrelevant and paths are absolute. They resolve
+in this order:
+
+1. Env vars (override everything): `DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`.
+2. Defaults under the harness home: `$DSH_HOME/memory-vault` and `$DSH_HOME/memory-vault-server`
+   (`~/.dsh` when `$DSH_HOME` is unset).
+3. Profile patch (`cordis.patch.yml`) or `--patch` overlay with explicit values.
+
+| Env var | Used for | Default |
+|---|---|---|
+| `DSH_MEMORY_PATH` | vault directory (the server receives it as `MEMORY_PATH`) | `$DSH_HOME/memory-vault` |
+| `DSH_MEMORY_SERVER_DIR` | directory with `server.py` | `$DSH_HOME/memory-vault-server` |
+
+Plugin-level config (patch layer): `provider` (`deepseek-official`), `model`
+(`deepseek-v4-flash`), `maxTokens`, `minTranscriptChars`, `enabled`.
+
+The vault starter is an OKF bundle: `templates/` (one per entry type), `type-registry.yaml`
+(source of truth for types) and `tag-vocabulary.json` (tag normalization). Runtime data
+(`projects/`, `raw/`, `logs/`, `memory.db`) is created by the server on first use and excluded
+from git.
+
+**Runtime for the server**: `uv` on PATH is recommended but not required. The bundled
+`launcher.mjs` runs the server with `uv run` when uv is present, and otherwise falls back to a
+pip-managed venv (`python3 -m venv` + `pip install -r requirements.txt`; the first boot needs
+network). Both packages are self-contained: they ship the Python server and the vault starter.
+
+## Operations
 
 ```sh
 # composed config shows both bundles with the resolved paths
@@ -138,21 +163,26 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}' \
   | MEMORY_PATH=$HOME/.dsh/memory-vault uv run --directory memory-vault-server python server.py
-```
 
-**Run a second harness instance on another port** (for testing without touching
-your main session):
-
-```sh
+# a second harness instance on another port (testing without touching your main session)
 pnpm dsh web --port 3090
 ```
 
-### Second MCP client: opencode (zona central `~/.memories`)
+### Troubleshooting pnpm
 
-Since 2026-09-09 the vault lives in a dedicated git repo at `~/.memories`
-(union of the former DSH vault and the legacy `opencode-memory-vault`
-bundle; see [`docs/central-zone.md`](docs/central-zone.md)). opencode is a
-second stdio MCP client over the same server and vault — `~/.config/opencode/opencode.json`:
+- `unable to open database file` → the pnpm store is not writable (sandboxed environment). Use
+  `--store-dir ./.pnpm-store` on every `pnpm install` and on
+  `dsh plugin --profile X --store-dir ./.pnpm-store add ...`.
+- `dsh: pnpm failed` when installing from GitHub → only applies to packages with a `prepare`
+  script; copy the printed key into the profile's `pnpm-workspace.yaml` (allowBuilds). The
+  subpackages of this monorepo cannot be installed with `github:...` at all — use npm or a
+  tarball.
+
+## Second MCP client: opencode
+
+The vault is a plain stdio MCP server, so any MCP client can use the same server and the same
+vault (see [`docs/central-zone.md`](docs/central-zone.md) for the shared-vault layout). For
+opencode, `~/.config/opencode/opencode.json`:
 
 ```json
 "mcp": {
@@ -165,96 +195,39 @@ second stdio MCP client over the same server and vault — `~/.config/opencode/o
 }
 ```
 
-> opencode requires the key **`environment`** (not `env` — that one is
-> silently ignored and the server falls back to the repo default vault).
+> The key must be **`environment`** — `env` is silently ignored and the server falls back to the
+> default vault. The plugin skills are a DSH feature and do **not** travel over MCP: an opencode
+> user who wants the same commands copies the `SKILL.md` files into a directory opencode reads
+> (`~/.config/opencode/skills/<name>/SKILL.md`), renaming the tool prefix from `mcp__memory__*`
+> to `memory-server_*`.
 
-## Memory stack
-
-The plugins work on an OKF vault (`memory-vault/` in this repo, or your own).
-Runtime: `uv` on PATH, or Python ≥3.11 with a network on first boot — both
-launch paths go through the bundled `launcher.mjs`, which uses `uv run` and
-falls back to a pip-managed `.venv` (`requirements.txt`) when uv is missing.
-
-The post-session digest runs **in-process** through the harness's own LLM
-service (`ctx.llm`, provider `deepseek-official` by default — configurable with
-`provider`/`model`), so the plugins need no external CLI and store no
-credentials: they use the same key DSH is configured with.
-
-### Path resolution (cwd-independent)
-
-DSH does **not** chdir — the launch directory is irrelevant. Paths resolve in
-this order:
-
-1. Env vars (override everything): `DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`.
-2. Defaults under the **harness home**: `$DSH_HOME/memory-vault` and
-   `$DSH_HOME/memory-vault-server` (`~/.dsh` when `$DSH_HOME` is unset).
-3. Profile patch (`cordis.patch.yml`) or `--patch` overlay with explicit values.
-
-| Env var | Used for | Default |
-|---|---|---|
-| `DSH_MEMORY_PATH` | vault directory | `$DSH_HOME/memory-vault` |
-| `DSH_MEMORY_SERVER_DIR` | directory with `server.py` (MCP server) | `$DSH_HOME/memory-vault-server` |
+## Development
 
 ```sh
-# run the MCP server standalone:
-MEMORY_PATH=./memory-vault uv run --directory ./memory-vault-server python server.py
+pnpm install
+pnpm -r build
+
+# run the harness against the checkout, with an overlay (paths relative to the repo cwd)
+dsh web --patch ./examples/dev-memory.cordis.yml
 ```
 
-### Vault
-
-`memory-vault/` is an OKF bundle: `templates/` (per-type templates),
-`type-registry.yaml` (source of truth for types), `tag-vocabulary.json`
-(tag normalization). Runtime data (`projects/`, `raw/`, `logs/`, `memory.db`)
-is created by the server on first use and excluded from git (`.gitignore`).
-
-## Architecture & diagrams
-
-Interactive versions of the diagrams (standalone HTML, open in any browser):
-
-- [stack.html](docs/diagrams/stack.html) — architecture
-- [session-digest.html](docs/diagrams/session-digest.html) — dataflow
-- [mcp-tool-call.html](docs/diagrams/mcp-tool-call.html) — sequence
-- [capture-lifecycle.html](docs/diagrams/capture-lifecycle.html) — lifecycle
-
-Editable specs live in `docs/diagrams/*.json` (generated with
-[archify](https://github.com/tt-a1i/archify)). Full write-up:
-[`docs/architecture.md`](docs/architecture.md); index: [`docs/README.md`](docs/README.md).
-
-## Repository layout
-
 ```
-packages/memory-mcp/          # cordis bundle: MCP stdio client to the vault (+ brain, checkpoint skills)
+packages/memory-mcp/          # cordis bundle: MCP stdio client (+ brain, checkpoint skills)
 packages/memory-auto/         # cordis bundle: automatic session digest (+ checkpoint-auto skill)
 memory-vault-server/          # Python MCP server (SQLite + Markdown OKF)
 memory-vault/                 # vault starter (templates + type registry)
 scripts/digest_session.py     # optional standalone digest CLI (not used by the plugins)
-examples/dev-memory.cordis.yml      # memory-mcp
-examples/dev-memory-auto.cordis.yml # memory-mcp + memory-auto
+examples/dev-memory.cordis.yml       # memory-mcp
+examples/dev-memory-auto.cordis.yml  # memory-mcp + memory-auto
 ```
 
-## Layer order
-
-1. `dsh.profile.bundles` (base + every installed bundle)
-2. `$DSH_HOME/profiles/<name>/cordis.patch.yml`
-3. `$DSH_HOME/cordis.patch.yml`
-4. `--patch` overlays
-
-Patch replaces `config` wholesale — it does not merge.
-
-## Troubleshooting pnpm
-
-- `unable to open database file` → the pnpm store is not writable in a sandboxed
-  environment. Use `--store-dir ./.pnpm-store` on every `pnpm install` and on
-  `dsh plugin --profile X --store-dir ./.pnpm-store add ...`.
-- `dsh: pnpm failed` when installing from GitHub → only applies to packages with
-  a `prepare` script; copy the printed key into the profile's
-  `pnpm-workspace.yaml` (allowBuilds). Note: the subpackages of this monorepo
-  cannot be installed with `github:...` (pnpm has no git-subdirectory support) —
-  use npm or a tarball.
+`pnpm -r build` runs each package's build; `pnpm bundle` copies the server and the vault starter
+into the packages, so a release tarball is self-contained. CI runs lint, build and the test
+suites on every push (`pnpm lint && pnpm -r build && pnpm -r test`).
 
 ## Docs
 
-- [`docs/`](docs/README.md) — public documentation (architecture + diagrams)
+- [`docs/`](docs/README.md) — architecture, diagrams, the central zone, releasing
 - [Releasing & version tags](docs/releasing.md) — which commit each `v*` tag maps to
 - [Your first plugin](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/)
 - [Build a tool](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/tool)
