@@ -24,7 +24,6 @@ import {
   idleCheckpoint,
   compactingCheckpoint,
   isGitCommit,
-  buildCheckpointPrompt,
   buildCommitCheckpointPrompt,
   type SessionState,
 } from './pure.js'

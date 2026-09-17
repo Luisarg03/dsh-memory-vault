@@ -1,6 +1,6 @@
 {
   "name": "@luisarg/memory-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "description": "DSH MCP client for the memory vault",
   "repository": {

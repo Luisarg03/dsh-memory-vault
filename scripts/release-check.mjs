@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
-import { PACKAGES, ROOT, packageVersions, remoteTagIsAnnotated, tagProblems, versionProblems } from './release-lib.mjs'
+import { PACKAGES, ROOT, remoteTagIsAnnotated, tagProblems, versionProblems } from './release-lib.mjs'
 
 const argv = process.argv.slice(2)
 const arg = (name) => {
