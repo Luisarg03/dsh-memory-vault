@@ -57,3 +57,6 @@ packages/memory-auto/vault/
 # npm project config (written by `npm config set --location project`; may hold
 # auth tokens on a developer machine)
 .npmrc
+
+# local staging for profile synthesis (never committed)
+.staging/
