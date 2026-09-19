@@ -41,6 +41,9 @@ DeepSeek Harness (web / headless)  ← plugins and services in the profile proce
   remain the source of truth. It exposes 10 tools: `search_memory`,
   `store_decision`, `store_fact`, `store_learning`, `store_convention`,
   `store_profile`, `store_source`, `export_memories`, `get_profile`, `ping`.
+  Both bundles bootstrap it under the harness home: the server directory is
+  refreshed on every boot (it is code, and a pip `.venv` beside it survives the
+  merge), while the vault starter is copied only into a missing vault.
 - **memory-vault** (`memory-vault/`) is the starter bundle: OKF templates per
   entry type, `type-registry.yaml` (source of truth for types) and
   `tag-vocabulary.json` (tag normalization). Runtime data (`projects/`,
