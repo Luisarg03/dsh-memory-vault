@@ -39,6 +39,21 @@ describe('default vault path', () => {
     expect(read('packages/memory-mcp/cordis.patch.yml')).toContain("dshHomePath('memory-vault-server')")
   })
 
+  it('refreshes the server code on every boot, in both plugins', () => {
+    // The bootstrap copies the vault only when it is missing (user data) but must
+    // overwrite the server bundle (our code): the 0.1.5 shape skipped both once
+    // they existed, so every Python fix stopped at the first install.
+    for (const file of ['packages/memory-mcp/src/index.ts', 'packages/memory-auto/src/plugin.ts']) {
+      const src = read(file)
+      expect(src, `${file}: server bundle is not refreshed`).toContain(
+        'cpSync(bundledServer, serverDir, { recursive: true, force: true })',
+      )
+      expect(src, `${file}: vault is no longer write-once`).toContain(
+        "ensure(memoryPath, join(packageRoot, 'vault'), 'type-registry.yaml')",
+      )
+    }
+  })
+
   it('keeps a registry-less checkout working (CI smoke test runs with no MEMORY_PATH)', () => {
     // The bare `python -c "import server"` on CI has neither the env var nor ~/.memories,
     // so the last fallback must still reach the starter shipped next to the server — and

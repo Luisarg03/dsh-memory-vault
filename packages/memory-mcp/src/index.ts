@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -41,22 +41,12 @@ function resolveMemoryPath(value: string): string {
 }
 
 /** Copy the bundled dir into `target` when `key` is missing there. */
+/** Copy the bundled dir into `target` when `key` is missing there (user data). */
 function ensure(target: string, bundled: string, key: string): boolean {
   if (existsSync(join(target, key))) return false
   if (!existsSync(bundled)) return false
   mkdirSync(target, { recursive: true })
   cpSync(bundled, target, { recursive: true })
-  return true
-}
-
-/** Copy one bundled file into `target` when missing (upgrades add files 0.1.1 → 0.1.2). */
-function ensureFile(target: string, bundled: string, file: string): boolean {
-  const dest = join(target, file)
-  if (existsSync(dest)) return false
-  const src = join(bundled, file)
-  if (!existsSync(src)) return false
-  mkdirSync(target, { recursive: true })
-  cpSync(src, dest)
   return true
 }
 
@@ -72,22 +62,22 @@ export function apply(ctx: Context, config: Config) {
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
   const memoryPath = resolveMemoryPath(config.memoryPath)
 
-  // Self-contained install: first boot copies the bundled server and vault
-  // starter under the harness home when they are missing. Env-overridden
-  // paths are respected (never overwritten, never copied over).
-  if (ensure(serverDir, join(packageRoot, 'server'), 'server.py')) {
-    console.log(`[memory-mcp] installed memory-vault-server -> ${serverDir}`)
+  // Self-contained install. The vault is user data, so it is copied only when
+  // missing; the server directory is our code, so it is refreshed on every boot.
+  // 0.1.5 copied the server only when `server.py` was absent, which froze the
+  // Python code of every existing install (and shipped fixes to nobody).
+  // cpSync merges: a pip `.venv` or `__pycache__` left in the target survives.
+  const bundledServer = join(packageRoot, 'server')
+  // `resolve` because a checkout can legitimately point serverDir at the bundle
+  // itself (tests and local dev); copying a directory onto itself throws EINVAL.
+  if (existsSync(join(bundledServer, 'server.py')) && resolve(bundledServer) !== resolve(serverDir)) {
+    const firstBoot = !existsSync(join(serverDir, 'server.py'))
+    mkdirSync(serverDir, { recursive: true })
+    cpSync(bundledServer, serverDir, { recursive: true, force: true })
+    if (firstBoot) console.log(`[memory-mcp] installed memory-vault-server -> ${serverDir}`)
   }
   if (ensure(memoryPath, join(packageRoot, 'vault'), 'type-registry.yaml')) {
     console.log(`[memory-mcp] installed vault starter -> ${memoryPath}`)
-  }
-  // launcher.mjs runs the server via uv or the pip-venv fallback; upgrades of
-  // existing installs (server.py already present) still need the new files.
-  const bundled = join(packageRoot, 'server')
-  for (const file of ['launcher.mjs', 'requirements.txt']) {
-    if (ensureFile(serverDir, bundled, file)) {
-      console.log(`[memory-mcp] installed ${file} -> ${serverDir}`)
-    }
   }
   if (!existsSync(join(serverDir, 'server.py'))) {
     console.warn(

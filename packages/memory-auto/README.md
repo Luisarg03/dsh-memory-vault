@@ -29,7 +29,7 @@ local discovery table — a same-named skill in a user or project root still win
 
 | Command | Source | What it does |
 |---|---|---|
-| `/checkpoint-auto` | `skills/checkpoint-auto/SKILL.md` | Explains and steers the automatic capture: the git-commit, compaction and idle triggers, what an injected `[memory-checkpoint]` prompt means, and the `provider` / `model` / `maxTokens` / `minTranscriptChars` / `enabled` knobs |
+| `/checkpoint-auto` | `skills/checkpoint-auto/SKILL.md` | Explains and steers the automatic capture: the git-commit, compaction, idle and session-end triggers, what an injected `[memory-checkpoint]` prompt means, and the `provider` / `model` / `maxTokens` / `minTranscriptChars` / `enabled` knobs |
 
 It deliberately does **not** restate the entry vocabulary: that lives in `packages/memory-mcp`'s
 `checkpoint` skill and in `src/pure.ts`, which builds the injected prompt so it keeps working with

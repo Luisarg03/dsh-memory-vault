@@ -15,8 +15,9 @@ The memory plugin exposes a Markdown knowledge base (OKF) over MCP; the vault's
 `memory.db` is a derived SQLite FTS5 index over that Markdown. Read it through the
 plugin's tools — `mcp__memory__*` when the server is named `memory` — never by hand.
 
-**`/brain` is read-only.** It writes nothing: capture is `/checkpoint`, and the profile
-layer is `/checkpoint-perfil`.
+**`/brain` is read-only.** It writes nothing: capture is `/checkpoint`. The profile layer
+that `/checkpoint-perfil` maintains is a user-level skill, not one this plugin ships — if
+that command is not in the skill catalog, `store_profile` is the only profile writer here.
 
 ## 1. Locate the vault
 
