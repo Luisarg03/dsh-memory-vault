@@ -42,19 +42,19 @@ provenance attestation.
 
 ```sh
 # 1. bump both package.json files in lockstep
-pnpm release:bump 0.1.6
+pnpm release:bump 0.1.7
 pnpm -r build && pnpm -r test && pnpm release:check
 
 # 2. merge the bump to main through a PR (the ruleset requires the CI check)
 
 # 3. tag the merged commit and push the tag
-git tag -a v0.1.6 -m "Release 0.1.6" && git push origin v0.1.6
+git tag -a v0.1.7 -m "Release 0.1.7" && git push origin v0.1.7
 ```
 
 Then the workflow takes over:
 
 1. fails fast if npm < 11.5.1 (Trusted Publishing requirement);
-2. `release-check.mjs --tag v0.1.6 --strict` — tag, both package versions and
+2. `release-check.mjs --tag v0.1.7 --strict` — tag, both package versions and
    HEAD must agree, and the tree must be clean;
 3. packs both packages and validates every tarball (`check-tarball.mjs`):
    required bundled files present, no vault data, no build residue;

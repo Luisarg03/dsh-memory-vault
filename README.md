@@ -38,7 +38,7 @@ derived from it.
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp@0.1.6 @luisarg/memory-auto@0.1.6
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.7 @luisarg/memory-auto@0.1.7
 
 # 2. launch — first boot installs the vault server under $DSH_HOME (~/.dsh by
 #    default) and the vault starter at ~/.memories, automatically
