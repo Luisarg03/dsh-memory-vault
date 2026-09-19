@@ -39,8 +39,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
+      # The ROOT build, not `pnpm -r build`: it also runs `pnpm bundle`, which is
+      # what puts the Python server and the vault starter inside the packages. The
+      # bootstrap tests read that packaged layout, and so does the publish job —
+      # testing the un-bundled tree would leave both unverified until release day.
       - name: Build
-        run: pnpm -r build
+        run: pnpm build
       - name: Test
         run: pnpm -r test
       # Catches a package.json/tag/lockstep mistake before a tag exists, so the

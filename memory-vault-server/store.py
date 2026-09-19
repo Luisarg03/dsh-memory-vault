@@ -175,7 +175,9 @@ def _write_okf_file(
         frontmatter_lines.append(f"project: {project}")
     if openspec_change_id:
         frontmatter_lines.append(f"openspec_change_id: {openspec_change_id}")
-    if confidence is not None and entry_type in ("facts", "conventions"):
+    # Confidence is a fact-only field: `templates/fact.md` is the only OKF template
+    # that declares it, and `store_fact` is the only tool whose schema exposes it.
+    if confidence is not None and entry_type == "facts":
         frontmatter_lines.append(f"confidence: {confidence}")
     for key, value in (extra_fields or {}).items():
         frontmatter_lines.append(f"{key}: {value}")
