@@ -21,9 +21,9 @@ layer is `/checkpoint-perfil`.
 ## 1. Locate the vault
 
 Only needed when you touch the filesystem. The plugin resolves the vault in this order:
-`DSH_MEMORY_PATH` → `$DSH_HOME/memory-vault` (`~/.dsh/memory-vault` when `DSH_HOME` is
-unset) → the profile's own patch. The server receives the result as `MEMORY_PATH`. Paths
-are absolute and do not depend on the cwd.
+`DSH_MEMORY_PATH` → `$HOME/.memories` (the OS home — `DSH_HOME` does not move it) → the
+profile's own patch. The server receives the result as `MEMORY_PATH`. Paths are absolute
+and do not depend on the cwd.
 
 ## 2. Resolve the project
 
@@ -31,7 +31,7 @@ are absolute and do not depend on the cwd.
 a new project — there is no validation against a list — so list before filtering:
 
 ```sh
-ls "${DSH_MEMORY_PATH:-${DSH_HOME:-$HOME/.dsh}/memory-vault}"/projects/
+ls "${DSH_MEMORY_PATH:-$HOME/.memories}"/projects/
 ```
 
 The key is **not necessarily the repo basename**: it can be the `package.json` name, a

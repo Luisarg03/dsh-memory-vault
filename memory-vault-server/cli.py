@@ -8,10 +8,17 @@ from pathlib import Path
 
 
 def get_memory_path() -> Path:
-    """Return MEMORY_PATH from env, or default to `<project>/memory-vault/`."""
+    """Vault root: `$MEMORY_PATH`, else `~/.memories`, else this checkout's starter.
+
+    The last fallback keeps a bare `python server.py` (CI smoke test, dev) working
+    before any vault exists at the default location.
+    """
     env = os.environ.get("MEMORY_PATH")
     if env:
         return Path(env)
+    home_vault = Path.home() / ".memories"
+    if (home_vault / "type-registry.yaml").is_file():
+        return home_vault
     return Path(__file__).resolve().parent.parent / "memory-vault"
 
 

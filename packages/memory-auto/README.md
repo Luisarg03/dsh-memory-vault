@@ -40,7 +40,7 @@ learns that capture is off and how to turn it back on.
 
 | Field | Purpose | Default |
 |---|---|---|
-| `memoryPath` | vault directory | `$DSH_MEMORY_PATH` or `$DSH_HOME/memory-vault` |
+| `memoryPath` | vault directory | `$DSH_MEMORY_PATH` or `~/.memories` |
 | `serverDir` | directory containing the vault `server.py` | `$DSH_MEMORY_SERVER_DIR` or `$DSH_HOME/memory-vault-server` |
 | `provider` | LLM provider route (harness registry) | `deepseek-official` |
 | `model` | LLM model id | `deepseek-v4-flash` |

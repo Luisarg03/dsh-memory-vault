@@ -25,8 +25,12 @@ de ahí).
 
 | Cliente | Config | Spawn |
 |---|---|---|
-| DSH profile `web` | `~/.dsh/profiles/web/cordis.patch.yml` (`memory-mcp` env `MEMORY_PATH`, `memory-auto` memoryPath) | `uv run --directory dsh-memory-vault/memory-vault-server python server.py` |
+| DSH profile `web` | bundle default: vault `~/.memories`, server `$DSH_HOME/memory-vault-server` (override con `DSH_MEMORY_PATH` / `DSH_MEMORY_SERVER_DIR`, o `~/.dsh/profiles/web/cordis.patch.yml`) | `uv run --directory dsh-memory-vault/memory-vault-server python server.py` |
 | opencode (global) | `~/.config/opencode/opencode.json` → `mcp.memory-server` | mismo comando, `"environment": {"MEMORY_PATH": "~/.memories"}` |
+
+> El default del bundle es `~/.memories` (no `$DSH_HOME/memory-vault`, que era la
+> regresión de 0.1.5): un perfil sin patch ya escribe en la zona central. Un patch
+> vacío (`[]`) no pinea nada, así que el default es lo que manda.
 
 > Pitfall: opencode usa la key **`environment`**, no `env` — `env` se ignora
 > silenciosamente y el server cae al vault default (escribe fuera de la zona).

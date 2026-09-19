@@ -33,6 +33,13 @@ function resolveUnderHome(value: string, segment: string): string {
   return isAbsolute(v) ? v : join(dshHome(), v)
 }
 
+/** Vault root: `~/.memories` by default, independent of `$DSH_HOME`. */
+function resolveMemoryPath(value: string): string {
+  const v = value.trim()
+  if (v.length === 0) return join(homedir(), '.memories')
+  return isAbsolute(v) ? v : join(homedir(), v)
+}
+
 /** Copy the bundled dir into `target` when `key` is missing there. */
 function ensure(target: string, bundled: string, key: string): boolean {
   if (existsSync(join(target, key))) return false
@@ -63,7 +70,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
-  const memoryPath = resolveUnderHome(config.memoryPath, 'memory-vault')
+  const memoryPath = resolveMemoryPath(config.memoryPath)
 
   // Self-contained install: first boot copies the bundled server and vault
   // starter under the harness home when they are missing. Env-overridden

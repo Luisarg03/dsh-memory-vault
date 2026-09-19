@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--memory-path",
         default=None,
-        help="OKF bundle directory (default: $MEMORY_PATH or repo memory-vault)",
+        help="OKF bundle directory (default: $MEMORY_PATH, else ~/.memories)",
     )
     args = parser.parse_args(argv)
 
@@ -169,8 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.memory_path:
         os.environ["MEMORY_PATH"] = str(Path(args.memory_path).resolve())
     import store as _store_mod
+    from cli import get_memory_path
 
-    memory_path = Path(os.environ.get("MEMORY_PATH", "")).resolve()
+    memory_path = get_memory_path().resolve()
     if not memory_path.is_dir():
         print(f"error: {memory_path} is not a directory", file=sys.stderr)
         return 2

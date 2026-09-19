@@ -40,8 +40,8 @@ derived from it.
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
 dsh plugin --profile web add @luisarg/memory-mcp@0.1.5 @luisarg/memory-auto@0.1.5
 
-# 2. launch — first boot installs the vault server + starter under $DSH_HOME
-#    (~/.dsh/memory-vault-server and ~/.dsh/memory-vault) automatically
+# 2. launch — first boot installs the vault server under $DSH_HOME (~/.dsh by
+#    default) and the vault starter at ~/.memories, automatically
 dsh web
 
 # verify
@@ -125,13 +125,13 @@ DSH does **not** chdir: the launch directory is irrelevant and paths are absolut
 in this order:
 
 1. Env vars (override everything): `DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`.
-2. Defaults under the harness home: `$DSH_HOME/memory-vault` and `$DSH_HOME/memory-vault-server`
-   (`~/.dsh` when `$DSH_HOME` is unset).
+2. Defaults: the vault at `~/.memories` (the OS home — `DSH_HOME` does not move it) and
+   the server at `$DSH_HOME/memory-vault-server` (`~/.dsh` when `$DSH_HOME` is unset).
 3. Profile patch (`cordis.patch.yml`) or `--patch` overlay with explicit values.
 
 | Env var | Used for | Default |
 |---|---|---|
-| `DSH_MEMORY_PATH` | vault directory (the server receives it as `MEMORY_PATH`) | `$DSH_HOME/memory-vault` |
+| `DSH_MEMORY_PATH` | vault directory (the server receives it as `MEMORY_PATH`) | `~/.memories` |
 | `DSH_MEMORY_SERVER_DIR` | directory with `server.py` | `$DSH_HOME/memory-vault-server` |
 
 Plugin-level config (patch layer): `provider` (`deepseek-official`), `model`
@@ -153,16 +153,16 @@ network). Both packages are self-contained: they ship the Python server and the 
 # composed config shows both bundles with the resolved paths
 dsh --profile web --dump-config | grep -A8 memory
 
-# what the vault holds (default vault: ~/.dsh/memory-vault)
-ls ~/.dsh/memory-vault/projects/               # per-project OKF entries
-grep -i "digest" ~/.dsh/memory-vault/log.md    # digest markers
+# what the vault holds (default vault: ~/.memories)
+ls ~/.memories/projects/               # per-project OKF entries
+grep -i "digest" ~/.memories/log.md    # digest markers
 
 # talk to the vault MCP server directly (standalone smoke test)
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"cli","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}' \
-  | MEMORY_PATH=$HOME/.dsh/memory-vault uv run --directory memory-vault-server python server.py
+  | MEMORY_PATH=$HOME/.memories uv run --directory memory-vault-server python server.py
 
 # a second harness instance on another port (testing without touching your main session)
 pnpm dsh web --port 3090

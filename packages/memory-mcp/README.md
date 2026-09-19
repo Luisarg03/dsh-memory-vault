@@ -40,11 +40,12 @@ bootstrap and the MCP client.
 | Variable | Purpose | Default |
 |---|---|---|
 | `DSH_MEMORY_SERVER_DIR` | directory containing `server.py` | `$DSH_HOME/memory-vault-server` |
-| `DSH_MEMORY_PATH` | vault directory (forwarded to the server as `MEMORY_PATH`) | `$DSH_HOME/memory-vault` |
+| `DSH_MEMORY_PATH` | vault directory (forwarded to the server as `MEMORY_PATH`) | `~/.memories` |
 
 The bundle ships no cwd-dependent paths: the `cordis.patch.yml` layer resolves both
-values from the environment, falling back to the harness home (`$DSH_HOME`, or
-`~/.dsh`) — DSH does not chdir, so launching from any directory works.
+values from the environment. The vault falls back to the OS home (`~/.memories`, which
+`DSH_HOME` does not move); the server to the harness home (`$DSH_HOME`, or `~/.dsh`) —
+DSH does not chdir, so launching from any directory works.
 
 ## Development
 
