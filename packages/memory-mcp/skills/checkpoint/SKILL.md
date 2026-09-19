@@ -25,7 +25,7 @@ search first (step 3).
 new project:
 
 ```sh
-ls "${DSH_MEMORY_PATH:-${DSH_HOME:-$HOME/.dsh}/memory-vault}"/projects/
+ls "${DSH_MEMORY_PATH:-$HOME/.memories}"/projects/
 ```
 
 It is not always the repo basename — it can be the `package.json` name, a curated name, or
@@ -64,7 +64,7 @@ different casing **updates** the existing entry; changing one word creates a **n
 The vault is its own git repository — commit it:
 
 ```sh
-cd "${DSH_MEMORY_PATH:-${DSH_HOME:-$HOME/.dsh}/memory-vault}"
+cd "${DSH_MEMORY_PATH:-$HOME/.memories}"
 git add -A && git commit -m "memory(<project>): <what changed and why>"
 ```
 

@@ -71,6 +71,13 @@ function resolveUnderHome(value: string, fallbackSegment: string): string {
   return isAbsolute(v) ? v : join(dshHome(), v)
 }
 
+/** Vault root: `~/.memories` by default, independent of `$DSH_HOME`. */
+function resolveMemoryPath(value: string): string {
+  const v = value.trim()
+  if (v.length === 0) return join(homedir(), '.memories')
+  return isAbsolute(v) ? v : join(homedir(), v)
+}
+
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 /** Copy the bundled dir into `target` when `key` is missing there. */
@@ -111,7 +118,7 @@ export function apply(ctx: Context, config: Config) {
     return
   }
 
-  const memoryPath = resolveUnderHome(config.memoryPath, 'memory-vault')
+  const memoryPath = resolveMemoryPath(config.memoryPath)
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
 
   // Self-contained install: first boot copies the bundled server and vault

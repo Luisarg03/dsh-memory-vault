@@ -124,13 +124,14 @@ in the meantime. On session end the plugin flushes a post-session digest
 ## Configuration
 
 DSH does not chdir, so paths never depend on the launch directory. Resolution
-order: env vars (`DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`) → defaults under
-the harness home (`$DSH_HOME/memory-vault`, `$DSH_HOME/memory-vault-server`;
-`~/.dsh` when unset) → explicit profile patch values.
+order: env vars (`DSH_MEMORY_PATH`, `DSH_MEMORY_SERVER_DIR`) → defaults (the
+vault at `~/.memories`, the server under the harness home at
+`$DSH_HOME/memory-vault-server`; `~/.dsh` when unset) → explicit profile patch
+values. The vault default follows the OS home, not `DSH_HOME`.
 
 | Variable | Used by | Default |
 |---|---|---|
-| `DSH_MEMORY_PATH` | server (`MEMORY_PATH`), memory-auto, memory-mcp | `$DSH_HOME/memory-vault` |
+| `DSH_MEMORY_PATH` | server (`MEMORY_PATH`), memory-auto, memory-mcp | `~/.memories` |
 | `DSH_MEMORY_SERVER_DIR` | memory-mcp and memory-auto (server directory) | `$DSH_HOME/memory-vault-server` |
 
 Plugin-level config (patch layer): `provider` (`deepseek-official`),
