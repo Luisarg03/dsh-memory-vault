@@ -31,7 +31,7 @@ derived from it.
 |---|---|
 | **10 MCP tools** | `search_memory` · `store_decision` · `store_fact` · `store_learning` · `store_convention` · `store_profile` · `store_source` · `export_memories` · `get_profile` · `ping` |
 | **3 commands** | `/brain` and `/checkpoint` ship with `memory-mcp`; `/checkpoint-auto` ships with `memory-auto` |
-| **Automatic capture** | digests on git commit, compaction and idle — extracted in-process through the harness's own LLM service |
+| **Automatic capture** | digests on git commit, compaction, idle and session end — extracted in-process through the harness's own LLM service |
 | **A vault** | OKF bundle with per-type templates, a type registry and a tag vocabulary; runtime data is created on first use |
 
 ## Install
@@ -49,8 +49,8 @@ dsh --profile web --dump-config | grep -A8 memory
 ```
 
 > The version is pinned because pnpm's default `minimumReleaseAge` (3 days) would otherwise
-> resolve an older release. Upgrades never overwrite existing vault files: they copy only what
-> is missing.
+> resolve an older release. The bundled Python server is refreshed on every boot; the vault is
+> never overwritten — it copies only what is missing, so your entries survive upgrades.
 
 > **Upgrading from 0.1.5**: the default vault moved from `$DSH_HOME/memory-vault` to
 > `~/.memories` (the central zone in [`docs/central-zone.md`](docs/central-zone.md)). Entries
@@ -119,7 +119,7 @@ name, description and usage guidance, so it works in both places.
 
 ### Automatic capture
 
-`memory-auto` triggers digests on git commits, compactions and idle sessions. Digests log as
+`memory-auto` triggers digests on git commits, compactions, idle sessions and session end. Digests log as
 `[memory-auto] …` lines in the harness console, and the entries land under
 `<vault>/projects/<project>/<type>/` (Markdown) plus the SQLite FTS5 index. The extraction runs
 **in-process** through `ctx.llm` — the credentials DSH is already configured with — so there is no

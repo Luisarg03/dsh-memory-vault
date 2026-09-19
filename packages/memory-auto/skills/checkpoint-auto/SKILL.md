@@ -2,8 +2,8 @@
 name: checkpoint-auto
 description: >-
   Explains and steers the automatic memory capture that the memory-auto plugin runs: the
-  git-commit, compaction and idle triggers, what an injected [memory-checkpoint] prompt
-  means, and the in-process digest that writes entries on its own. Use when the user asks
+  git-commit, compaction, idle and session-end triggers, what an injected [memory-checkpoint]
+  prompt means, and the in-process digest that writes entries on its own. Use when the user asks
   "what is [memory-checkpoint]", "why did you save that", "how does automatic memory
   work", or wants to tune or disable it. Not the capture procedure itself — that is
   /checkpoint.
@@ -18,14 +18,16 @@ same selection rules; load that one to actually write entries.
 
 ## Triggers
 
-| Trigger | Fires when |
-|---|---|
-| git commit | a tool call runs a git commit |
-| Compaction | the session compacts and activity exists |
-| Idle | the session goes idle with activity |
+| Trigger | Fires when | What happens |
+|---|---|---|
+| git commit | a tool call runs a git commit | queues a `[memory-checkpoint]` prompt for the next step |
+| Compaction | the session compacts and activity exists | queues a `[memory-checkpoint]` prompt for the next step |
+| Idle | the session goes idle with activity | digests directly, no prompt |
+| Session end | the session is disposed, or the plugin unloads | digests directly, no prompt |
 
-A trigger queues a checkpoint; it reaches the agent on the next step as injected user
-context whose first line carries the marker `[memory-checkpoint]`.
+A queued checkpoint reaches the agent on the next step as injected user context whose first
+line carries the marker `[memory-checkpoint]`. The idle and session-end paths do not queue
+anything: the plugin runs the digest itself.
 
 ## The digest
 
@@ -51,7 +53,8 @@ patch), not in this skill:
 | `provider` / `model` | `deepseek-official` / `deepseek-v4-flash` | LLM target for the in-process digest |
 | `maxTokens` | `2048` | digest response budget |
 | `minTranscriptChars` | `200` | sessions with less transcript than this are not digested |
-| `memoryPath` / `serverDir` | env, else the harness home | where the vault and its server live |
+| `memoryPath` | env, else `$HOME/.memories` | where the vault lives |
+| `serverDir` | env, else `$DSH_HOME/memory-vault-server` | where the vault server lives |
 
 Turning capture off is a config change (`enabled: false`), not a skill change. State what
 you changed and where.
