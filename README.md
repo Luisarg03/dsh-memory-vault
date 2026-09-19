@@ -38,7 +38,7 @@ derived from it.
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp@0.1.5 @luisarg/memory-auto@0.1.5
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.6 @luisarg/memory-auto@0.1.6
 
 # 2. launch — first boot installs the vault server under $DSH_HOME (~/.dsh by
 #    default) and the vault starter at ~/.memories, automatically
@@ -51,6 +51,12 @@ dsh --profile web --dump-config | grep -A8 memory
 > The version is pinned because pnpm's default `minimumReleaseAge` (3 days) would otherwise
 > resolve an older release. Upgrades never overwrite existing vault files: they copy only what
 > is missing.
+
+> **Upgrading from 0.1.5**: the default vault moved from `$DSH_HOME/memory-vault` to
+> `~/.memories` (the central zone in [`docs/central-zone.md`](docs/central-zone.md)). Entries
+> written by 0.1.5 therefore stay in the old directory until you move them
+> (`rsync -a --ignore-existing ~/.dsh/memory-vault/projects/ ~/.memories/projects/`) or point
+> `DSH_MEMORY_PATH` back at it.
 
 **Developers** (local checkout instead of npm):
 
