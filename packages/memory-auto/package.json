@@ -35,8 +35,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4",
     "yaml": "^2.4.2"
   },
   "peerDependencies": {
@@ -47,7 +47,7 @@
     "typescript": "^7.0.2",
     "tsdown": "^0.23.0",
     "vitest": "^5.0.0",
-    "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-skill": "0.1.5-rc.2"
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.3",
+    "@deepseek-ai/dsh-skill": "0.1.5-rc.3"
   }
 }
