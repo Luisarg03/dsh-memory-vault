@@ -38,7 +38,7 @@ derived from it.
 
 ```sh
 # 1. install both plugins (npm, prebuilt — no build approvals, no repo clone)
-dsh plugin --profile web add @luisarg/memory-mcp@0.1.7 @luisarg/memory-auto@0.1.7
+dsh plugin --profile web add @luisarg/memory-mcp@0.1.8 @luisarg/memory-auto@0.1.8
 
 # 2. launch — first boot installs the vault server under $DSH_HOME (~/.dsh by
 #    default) and the vault starter at ~/.memories, automatically
@@ -51,6 +51,12 @@ dsh --profile web --dump-config | grep -A8 memory
 > The version is pinned because pnpm's default `minimumReleaseAge` (3 days) would otherwise
 > resolve an older release. The bundled Python server is refreshed on every boot; the vault is
 > never overwritten — it copies only what is missing, so your entries survive upgrades.
+
+> **DSH 0.2**: from 0.1.8 the peer ranges include `@deepseek-ai/dsh-skill` and
+> `@deepseek-ai/dsh-llm` 0.2.0-rc.x, so the plugins install on DSH 0.2 without version
+> exemptions. 0.1.7 keeps working on DSH 0.2 if you grant the exemption the plugin manager
+> suggests (`dsh plugin allow-version @luisarg/memory-mcp@0.1.7 --dsh-version 0.2.0-rc.2
+> --accept-risk`), but upgrading is the clean path.
 
 > **Upgrading from 0.1.5**: the default vault moved from `$DSH_HOME/memory-vault` to
 > `~/.memories` (the central zone in [`docs/central-zone.md`](docs/central-zone.md)). Entries

@@ -1,6 +1,6 @@
 {
   "name": "@luisarg/memory-mcp",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "description": "DSH MCP client for the memory vault",
   "repository": {
@@ -35,15 +35,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4",
     "yaml": "^2.4.2"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-skill": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0"
+    "@deepseek-ai/dsh-skill": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0 || >=0.2.0-rc.1 <0.3.0-0"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-skill": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-invariants": "0.2.0-rc.2",
     "typescript": "^7.0.2",
     "tsdown": "^0.23.0",
     "vitest": "^5.0.0"
