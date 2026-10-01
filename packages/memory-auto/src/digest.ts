@@ -5,6 +5,15 @@ import readline from 'node:readline'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { FinishReason, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
+
+// dsh-llm 0.2 removed the catch-all 'plugin' message source kind: producers
+// declare their own kind by augmenting MessageSourceMap (consumers fall
+// through unknown kinds).
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'memory-auto': { readonly kind: 'memory-auto' }
+  }
+}
 import {
   buildExtractionPrompt,
   chunkTranscript,
@@ -97,7 +106,7 @@ export async function extractEntriesWithLlm(
   const messages: Message[] = [
     createUserMessage({
       content: [{ type: 'text', text: user }],
-      source: { kind: 'plugin', plugin: 'memory-auto' },
+      source: { kind: 'memory-auto' },
     }),
   ]
   const options: GenerateOptions = {

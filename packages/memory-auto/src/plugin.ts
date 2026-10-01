@@ -179,7 +179,7 @@ export function apply(ctx: Context, config: Config) {
   }
 
   // session/created -> init state
-  ctx.on('session/created', async (session: DSHSession) => {
+  ctx.on('session/created' as any, async (session: DSHSession) => {
     const sid = (session as any)?.id ?? (session as any)?.sessionId
     const dir = (session as any)?.cwd ?? (session as any)?.directory ?? ''
     if (!sid) return
@@ -193,7 +193,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   // session/disposed -> digest
-  ctx.on('session/disposed', async (session: DSHSession) => {
+  ctx.on('session/disposed' as any, async (session: DSHSession) => {
     const sid = (session as any)?.id ?? (session as any)?.sessionId
     if (!sid) return
     const st = states.get(sid)
@@ -209,7 +209,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   // agent/status idle -> in-session capture gate
-  ctx.on('agent/status', async (payload: any) => {
+  ctx.on('agent/status' as any, async (payload: any) => {
     const agent = payload?.agent
     const status = payload?.status ?? payload?.agentStatus
     if (status !== 'idle') return
@@ -228,7 +228,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   // session/event -> git commit detect + compaction start
-  ctx.on('session/event', async (session: DSHSession, event: DSHEvt) => {
+  ctx.on('session/event' as any, async (session: DSHSession, event: DSHEvt) => {
     const sid = (session as any)?.id ?? (session as any)?.sessionId ?? (event as any)?.sessionId
     if (!sid) return
     const t = event?.type ?? ''
@@ -274,7 +274,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   // agent/pre-step Waterfall -> deliver queued checkpoint
-  ctx.on('agent/pre-step', async (payload: any, next: any) => {
+  ctx.on('agent/pre-step' as any, async (payload: any, next: any) => {
     const sid: string | undefined = payload?.agent?.sessionId ?? payload?.sessionId
     if (sid) {
       const q = queued.get(sid)
