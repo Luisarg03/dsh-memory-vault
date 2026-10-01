@@ -48,6 +48,6 @@
     "@deepseek-ai/dsh-invariants": "0.2.0-rc.2",
     "typescript": "^7.0.2",
     "tsdown": "^0.23.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.2"
   }
 }
