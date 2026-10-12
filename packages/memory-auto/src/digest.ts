@@ -71,17 +71,15 @@ function toolText(result: unknown): string {
 export function parseTagCatalog(result: unknown): TagCatalog | null {
   try {
     const parsed: any = JSON.parse(toolText(result))
-    const rows = Array.isArray(parsed) ? parsed : parsed?.tags
+    const rows = parsed?.tags
     if (!Array.isArray(rows)) return null
     const tags: TagCatalogEntry[] = rows
       .filter((t: any) => typeof t?.name === 'string' && t.name.trim())
       .map((t: any) => ({
         name: String(t.name),
         ...(Array.isArray(t.aliases) ? { aliases: t.aliases.filter((a: any) => typeof a === 'string') } : {}),
-        ...(typeof t.count === 'number' ? { count: t.count } : {}),
-        ...(typeof t.description === 'string' ? { description: t.description } : {}),
       }))
-    const truncated = Array.isArray(parsed) ? false : parsed?.truncated === true
+    const truncated = parsed?.truncated === true
     return { tags, truncated }
   } catch {
     return null
@@ -355,7 +353,7 @@ export async function writeEntries(client: McpClient, project: string, entries: 
       upserted += 1
       try {
         const parsed = JSON.parse(toolText(res))
-        const nt = Array.isArray(parsed) ? [] : (parsed?.new_tags ?? parsed?.newTags ?? [])
+        const nt = parsed?.new_tags ?? []
         for (const t of nt) {
           if (typeof t === 'string' && t && !newTags.includes(t)) newTags.push(t)
         }

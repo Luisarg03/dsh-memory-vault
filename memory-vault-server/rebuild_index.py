@@ -107,6 +107,22 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
     vocab = _store_mod.load_vocabulary(memory_path)
     vocab_new: list[str] = []
     n_inserted = n_updated = 0
+
+    def _refresh(where_col: str, where_val: str, new_dedup: bool) -> None:
+        # Preserve the id; refresh content/tags/metadata in place.
+        sets = ["content = ?", "tags = ?", "confidence = ?"]
+        params: list = [e["content"], _json_dumps(canon), float(e["confidence"] or 1.0)]
+        if new_dedup:
+            sets.append("dedup_key = ?")
+            params.append(dedup_key)
+        sets += ["openspec_change_id = ?", "updated_at = ?"]
+        params += [e["openspec_change_id"], e["updated_at"]]
+        store.db.execute(
+            f"UPDATE entries SET {', '.join(sets)} WHERE {where_col} = ?",
+            (*params, where_val),
+        )
+        store.db.commit()
+
     for singular, project, relpath, e in entries:
         try:
             if singular == "source":
@@ -131,21 +147,7 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
                 "SELECT * FROM entries WHERE dedup_key = ?", (dedup_key,)
             ).fetchone()
             if existing:
-                # Preserve the id; refresh content/tags/metadata in place.
-                store.db.execute(
-                    "UPDATE entries SET content = ?, tags = ?, confidence = ?,"
-                    " openspec_change_id = ?, updated_at = ?"
-                    " WHERE dedup_key = ?",
-                    (
-                        e["content"],
-                        _json_dumps(canon),
-                        float(e["confidence"] or 1.0),
-                        e["openspec_change_id"],
-                        e["updated_at"],
-                        dedup_key,
-                    ),
-                )
-                store.db.commit()
+                _refresh("dedup_key", dedup_key, new_dedup=False)
                 n_updated += 1
                 continue
             clash = store.db.execute(
@@ -155,21 +157,7 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
                 # Body edited: the content-derived dedup key changed and the
                 # lookup above missed. Refresh the path-id row in place —
                 # refusing would leave the index stale forever.
-                store.db.execute(
-                    "UPDATE entries SET content = ?, tags = ?, confidence = ?,"
-                    " dedup_key = ?, openspec_change_id = ?, updated_at = ?"
-                    " WHERE id = ?",
-                    (
-                        e["content"],
-                        _json_dumps(canon),
-                        float(e["confidence"] or 1.0),
-                        dedup_key,
-                        e["openspec_change_id"],
-                        e["updated_at"],
-                        row_id,
-                    ),
-                )
-                store.db.commit()
+                _refresh("id", row_id, new_dedup=True)
                 n_updated += 1
                 continue
             store._insert_row(

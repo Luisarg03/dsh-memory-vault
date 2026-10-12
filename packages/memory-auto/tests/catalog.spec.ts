@@ -32,14 +32,7 @@ describe('parseTagCatalog', () => {
     const parsed = parseTagCatalog(
       toolResult({ tags: [{ name: 'ci', aliases: ['continuous-integration'], count: 3 }], truncated: false }),
     )
-    expect(parsed).toEqual({ tags: [{ name: 'ci', aliases: ['continuous-integration'], count: 3 }], truncated: false })
-  })
-
-  it('accepts a bare array', () => {
-    expect(parseTagCatalog(toolResult([{ name: 'python' }]))).toEqual({
-      tags: [{ name: 'python' }],
-      truncated: false,
-    })
+    expect(parsed).toEqual({ tags: [{ name: 'ci', aliases: ['continuous-integration'] }], truncated: false })
   })
 
   it('returns null for garbage', () => {

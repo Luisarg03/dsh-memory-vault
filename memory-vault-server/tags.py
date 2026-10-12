@@ -163,9 +163,6 @@ def normalize_tags(
     info = _canonical_map(vocab)
     mapping: dict[str, str] = info["mapping"]
     ambiguous: dict[str, list[str]] = info["ambiguous"]
-    # Snapshot: registration below mutates `mapping` in place, so the
-    # pre-existing key set must be frozen before the loop.
-    pre_existing = set(mapping)
     for raw in tags:
         if not isinstance(raw, str):
             raise VocabularyError(f"invalid tag {raw!r}: must be a string")
@@ -190,23 +187,10 @@ def normalize_tags(
                 new_tags.append(resolved)
             elif not register and resolved not in new_tags and resolved not in canonical:
                 # Query path: report the would-be-new tag without registering.
-                if resolved not in mapping:
-                    new_tags.append(resolved)
+                new_tags.append(resolved)
         if resolved not in canonical:
             canonical.append(resolved)
-    # new_tags must not echo tags that resolved to pre-existing canonicals.
-    new_tags = [t for t in new_tags if t not in pre_existing]
     return canonical, new_tags
-
-
-def check_ambiguous_alias(vocab: dict, token: str) -> None:
-    """Raise :class:`VocabularyError` if ``token`` is an ambiguous alias."""
-    info = _canonical_map(vocab)
-    key = token.strip().lower()
-    if key in info["ambiguous"]:
-        raise VocabularyError(
-            f"ambiguous alias {token!r}: claimed by {info['ambiguous'][key]}"
-        )
 
 
 def stable_union(existing: list[str], incoming: list[str]) -> list[str]:

@@ -25,6 +25,7 @@ import {
   compactingCheckpoint,
   isGitCommit,
   buildCommitCheckpointPrompt,
+  defaultVaultPath,
   type SessionState,
 } from './pure.js'
 import { digestSessionDSM, type DigestConfig } from './digest.js'
@@ -71,13 +72,6 @@ function resolveUnderHome(value: string, fallbackSegment: string): string {
   return isAbsolute(v) ? v : join(dshHome(), v)
 }
 
-/** Vault root: `~/.memories` by default, independent of `$DSH_HOME`. */
-function resolveMemoryPath(value: string): string {
-  const v = value.trim()
-  if (v.length === 0) return join(homedir(), '.memories')
-  return isAbsolute(v) ? v : join(homedir(), v)
-}
-
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 /** Copy the bundled dir into `target` when `key` is missing there (user data). */
@@ -107,7 +101,7 @@ export function apply(ctx: Context, config: Config) {
     return
   }
 
-  const memoryPath = resolveMemoryPath(config.memoryPath)
+  const memoryPath = defaultVaultPath(config.memoryPath)
   const serverDir = resolveUnderHome(config.serverDir, 'memory-vault-server')
 
   // Self-contained install. The vault is user data, so it is copied only when
@@ -193,6 +187,18 @@ export function apply(ctx: Context, config: Config) {
   const blockedReason = (sid: string, via: string) =>
     `[memory-auto] ${via} skip ${sid}: no verified project (see the capture-blocked warning above for how to declare it)`
 
+  /** Shared capture gate: verified key for `sid` (synced onto `st.project`), or null after logging the skip. */
+  const gatedProject = async (sid: string, via: string): Promise<string | null> => {
+    const proj = await projectFor(sessionDirs.get(sid) ?? '')
+    if (!proj) {
+      console.warn(blockedReason(sid, via))
+      return null
+    }
+    const st = states.get(sid)
+    if (st) st.project = proj
+    return proj
+  }
+
   // session/created -> init state
   ctx.on('session/created' as any, async (session: DSHSession) => {
     const sid = (session as any)?.id ?? (session as any)?.sessionId
@@ -221,12 +227,8 @@ export function apply(ctx: Context, config: Config) {
       return
     }
     const dir = sessionDirs.get(sid) ?? ''
-    const proj = await projectFor(dir)
-    if (!proj) {
-      console.warn(blockedReason(sid, 'digest'))
-      return
-    }
-    st.project = proj
+    const proj = await gatedProject(sid, 'digest')
+    if (!proj) return
     const evts: DSHEvt[] = (session as any)?.events ?? []
     await digestSessionDSM(ctx, digestConfig, sid, dir, proj, evts)
   })
@@ -243,15 +245,13 @@ export function apply(ctx: Context, config: Config) {
     const text = idleCheckpoint(st, summary(sid))
     if (text) {
       const dir = sessionDirs.get(sid) ?? ''
-      const proj = await projectFor(dir)
+      const proj = await gatedProject(sid, 'idle checkpoint')
       if (!proj) {
         // Let a later idle retry once the key is fixed.
         st.checkpointDelivered = false
-        console.warn(blockedReason(sid, 'idle checkpoint'))
         return
       }
       console.log(`[memory-auto] idle checkpoint digest for ${sid}`)
-      st.project = proj
       const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
       await digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
     }
@@ -268,12 +268,8 @@ export function apply(ctx: Context, config: Config) {
     if (t === 'compaction/start') {
       const st = states.get(sid)
       if (!st) return
-      const proj = await projectFor(sessionDirs.get(sid) ?? '')
-      if (!proj) {
-        console.warn(blockedReason(sid, 'compaction checkpoint'))
-        return
-      }
-      st.project = proj
+      const proj = await gatedProject(sid, 'compaction checkpoint')
+      if (!proj) return
       const txt = compactingCheckpoint(st, summary(sid))
       if (txt) {
         console.log(`[memory-auto] compaction checkpoint queued for ${sid}`)
@@ -288,12 +284,8 @@ export function apply(ctx: Context, config: Config) {
       if (typeof cmd === 'string' && isGitCommit(cmd)) {
         const st = states.get(sid)
         if (st) {
-          const proj = await projectFor(sessionDirs.get(sid) ?? '')
-          if (!proj) {
-            console.warn(blockedReason(sid, 'commit checkpoint'))
-            return
-          }
-          st.project = proj
+          const proj = await gatedProject(sid, 'commit checkpoint')
+          if (!proj) return
           st.hasActivity = true
           queued.set(sid, buildCommitCheckpointPrompt(st))
           console.log(`[memory-auto] git commit queued for ${sid}`)
@@ -341,12 +333,8 @@ export function apply(ctx: Context, config: Config) {
         if (!st?.hasActivity) continue
         void (async () => {
           try {
-            const proj = await projectFor(dir)
-            if (!proj) {
-              console.warn(blockedReason(sid, 'dispose digest'))
-              return
-            }
-            st.project = proj
+            const proj = await gatedProject(sid, 'dispose digest')
+            if (!proj) return
             const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
             await digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
           } catch (err) {

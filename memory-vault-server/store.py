@@ -20,8 +20,8 @@ from cli import get_memory_path
 from registry import build_type_maps, load_type_registry
 from tags import (
     VocabularyError,
+    _canonical_map,
     atomic_write_text,
-    check_ambiguous_alias,
     load_vocabulary,
     normalize_tags,
     save_vocabulary,
@@ -1139,8 +1139,13 @@ class MemoryStore:
 
         qlower = query.strip().lower() if query and query.strip() else None
         qtokens = qlower.split() if qlower else []
+        ambiguous = _canonical_map(vocab)["ambiguous"]
         for tok in qtokens:
-            check_ambiguous_alias(vocab, tok)
+            key = tok.strip().lower()
+            if key in ambiguous:
+                raise VocabularyError(
+                    f"ambiguous alias {tok!r}: claimed by {ambiguous[key]}"
+                )
 
         counts: dict[str, int] = {}
         for _key, md in self._iter_project_files(project, None, excludes):

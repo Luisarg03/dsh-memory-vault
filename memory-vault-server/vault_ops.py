@@ -276,21 +276,14 @@ def cmd_restore(args) -> int:
 
 
 def cmd_diagnose(args) -> int:
+    from tags import _canonical_map
+
     vault = _require_abs_existing_dir("vault", args.vault)
     os.environ["MEMORY_PATH"] = str(vault)
     store = _store()
     vocab = store.load_vocabulary(vault)
-    canon = vocab.get("canonical") or {}
     # Alias/duplicate candidates: one alias claimed by several canonicals.
-    info_claims: dict[str, list[str]] = {}
-    for name, meta in canon.items():
-        aliases = meta.get("aliases") if isinstance(meta, dict) else []
-        for alias in [name, *(aliases or [])]:
-            if isinstance(alias, str):
-                info_claims.setdefault(alias.strip().lower(), []).append(name)
-    duplicates = {
-        k: sorted(set(v)) for k, v in info_claims.items() if len(set(v)) > 1
-    }
+    duplicates = _canonical_map(vocab)["ambiguous"]
 
     report: dict = {"vault": str(vault), "entries": [], "duplicates": duplicates}
     s = store.MemoryStore(storage_path=vault)

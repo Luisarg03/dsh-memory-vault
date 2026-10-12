@@ -9,7 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, basename, dirname } from "node:path";
+import { join, basename, dirname, isAbsolute } from "node:path";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -87,8 +87,13 @@ export function parseMemoryProjectDeclaration(text: string): string | null {
   return key ? key : null;
 }
 
-/** Vault root honoring the real env (`DSH_MEMORY_PATH`, then `MEMORY_PATH`). */
-export function defaultVaultPath(): string {
+/**
+ * Vault root: config → `DSH_MEMORY_PATH` → `MEMORY_PATH` → `~/.memories`.
+ * Relative config values resolve under the home dir; env values are used as-is.
+ */
+export function defaultVaultPath(config?: string): string {
+  const cfg = (config ?? "").trim();
+  if (cfg) return isAbsolute(cfg) ? cfg : join(homedir(), cfg);
   const env = process.env.DSH_MEMORY_PATH ?? process.env.MEMORY_PATH ?? "";
   if (env.trim()) return env.trim();
   return join(homedir(), ".memories");
@@ -351,8 +356,6 @@ export interface ValidEntry {
 export interface TagCatalogEntry {
   name: string
   aliases?: string[]
-  count?: number
-  description?: string
 }
 
 /** Render catalog rows as prompt lines (`name (aka a, b)`); empty in, empty out. */

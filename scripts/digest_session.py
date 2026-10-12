@@ -354,38 +354,6 @@ class OpenCodeLLMClient:
         return self._rng.uniform(0.0, base)
 
 
-# ── Tag vocabulary ────────────────────────────────────────────────────────
-# Deprecated: the store is the sole tag normalizer (aliases + new tags,
-# centrally). Local filtering used to discard unknown tags here, which is
-# exactly the silent loss the server contract forbids. Kept as a thin shim so
-# existing imports keep working; extract_entries no longer consults it.
-
-
-@dataclass
-class TagVocabulary:
-    canonical: set[str]
-    aliases: dict[str, str]
-    raw: dict
-
-    @classmethod
-    def load(cls, path: Path) -> "TagVocabulary":
-        data = _load_json_dict(path)
-        canonical = set(data.get("canonical", []))
-        aliases = {str(k).lower(): str(v) for k, v in data.get("aliases", {}).items()}
-        return cls(canonical=canonical, aliases=aliases, raw=data)
-
-    def normalize(self, tags: list[str]) -> tuple[list[str], list[str]]:
-        """Deprecated pass-through: returns (tags, []) — the store normalizes."""
-        seen: set[str] = set()
-        out: list[str] = []
-        for t in tags:
-            key = str(t).strip()
-            if key and key not in seen:
-                seen.add(key)
-                out.append(key)
-        return out, []
-
-
 # ── Project alias resolution ──────────────────────────────────────────────
 
 
@@ -476,7 +444,7 @@ def _render_tag_catalog(tags: list[dict]) -> str:
     """Render catalog entries as `- name (aka a, b)` lines; blanks dropped."""
     lines = []
     for t in tags or []:
-        name = str(t.get("name", "")).strip() if isinstance(t, dict) else str(t).strip()
+        name = t.get("name", "")
         if not name:
             continue
         aliases = [str(a) for a in (t.get("aliases") or []) if isinstance(t, dict) and str(a).strip()]
@@ -524,17 +492,14 @@ def extract_entries(
     llm: LLMClient,
     store: MemoryStore,
     *,
-    tag_vocab: TagVocabulary | None = None,
     project_aliases: dict[str, str] | None = None,
     now: datetime | None = None,
 ) -> DigestResult:
     """Run the full extraction pipeline. Never raises on parse/retry failure;
     logs and returns zero-upsert result instead.
 
-    `tag_vocab` is accepted for backwards compatibility and ignored: the
-    store normalizes tags centrally. The relevant catalog is fetched live
-    from `store.list_tags` (bounded query) before extraction — see
-    `_fetch_tag_catalog`.
+    The relevant catalog is fetched live from `store.list_tags` (bounded
+    query) before extraction — see `_fetch_tag_catalog`.
     """
     if not transcript or not transcript.strip():
         log.info("empty transcript; zero writes")
@@ -759,8 +724,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project", required=True, help="Project name (or alias)")
     parser.add_argument("--memory-path", type=Path, default=None,
                         help="Path to the OKF bundle (default: $MEMORY_PATH or ./memory-vault)")
-    parser.add_argument("--tag-vocab", type=Path, default=None,
-                        help="Path to tag vocabulary JSON (default: <memory>/tag-vocabulary.json)")
     parser.add_argument("--project-aliases", type=Path, default=None,
                         help="Path to project aliases JSON (default: <memory>/project-aliases.json)")
     parser.add_argument("--model", default=os.environ.get("LLM_MODEL"),
@@ -808,9 +771,7 @@ def main(argv: list[str] | None = None) -> int:
     store = MemoryStore(storage_path=memory_path)
     store.initialize()
 
-    # Load vocab and aliases
-    tag_vocab_path = args.tag_vocab or (memory_path / "tag-vocabulary.json")
-    tag_vocab = TagVocabulary.load(tag_vocab_path)
+    # Load project aliases
     project_aliases_path = args.project_aliases or (memory_path / "project-aliases.json")
     project_aliases = load_project_aliases(project_aliases_path)
 
@@ -832,7 +793,6 @@ def main(argv: list[str] | None = None) -> int:
             project=args.project,
             llm=llm,
             store=store,
-            tag_vocab=tag_vocab,
             project_aliases=project_aliases,
         )
         log.info("digest result: %s", result)
