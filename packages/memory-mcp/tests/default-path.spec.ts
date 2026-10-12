@@ -11,10 +11,12 @@ const ROOT = join(dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)
 
 const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
 
-/** Each site spells the default differently; all five must point at the same directory. */
+/** Each site spells the default differently; all of them must point at the same directory. */
 const VAULT_DEFAULT_SITES = [
   { file: 'packages/memory-mcp/src/index.ts', expected: "join(homedir(), '.memories')" },
-  { file: 'packages/memory-auto/src/plugin.ts', expected: "join(homedir(), '.memories')" },
+  // plugin.ts delegates the default to the shared resolver in pure.ts
+  { file: 'packages/memory-auto/src/plugin.ts', expected: 'defaultVaultPath(config.memoryPath)' },
+  { file: 'packages/memory-auto/src/pure.ts', expected: 'join(homedir(), ".memories")' },
   { file: 'packages/memory-mcp/cordis.patch.yml', expected: "/.memories'" },
   { file: 'packages/memory-auto/cordis.patch.yml', expected: "/.memories'" },
   { file: 'memory-vault-server/cli.py', expected: 'Path.home() / ".memories"' },

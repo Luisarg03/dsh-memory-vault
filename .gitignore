@@ -9,7 +9,6 @@ dist/
 
 # local env
 .env
-.dsh-test-home*/
 .pnpm-store/
 .tmp/
 

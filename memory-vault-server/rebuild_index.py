@@ -1,9 +1,14 @@
 """Rebuild the SQLite FTS5 index from the OKF Markdown bundle (index-only).
 
-Walks `projects/<project>/<type>/*.md` and `raw/*.md`, parses each file and
-inserts rows directly into SQLite. Markdown stays the source of truth: this
-script never rewrites .md files (upsert_entry's write path would duplicate
-them with today's date on a fresh DB).
+Walks `projects/<project>/<type>/*.md` (nested projects included) and
+`raw/*.md`, parses each file and inserts rows directly into SQLite. Markdown
+stays the source of truth: this script never rewrites .md files (upsert_entry's
+write path would duplicate them with today's date on a fresh DB).
+
+Idempotent: new row ids derive from file paths, dedup keys from content
+(sources: ``source_url`` — never the path), so re-running converges.
+Re-runs preserve existing row ids and refresh content/tags/metadata in place;
+DB-only profile rows are left untouched (never deleted, never rewritten).
 
 Idempotent: row ids derive from file paths, dedup keys from content, so
 re-running converges. Run after importing a bundle into a new vault dir
@@ -11,19 +16,22 @@ re-running converges. Run after importing a bundle into a new vault dir
 
     uv run --directory memory-vault-server python rebuild_index.py \
         --memory-path /path/to/vault
-
-DB-only data (profiles) is NOT covered — migrate profiles separately.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import sys
 from pathlib import Path
 
 _store_mod = None  # set in main() once MEMORY_PATH points at the target bundle
+
+
+def _json_dumps(tags) -> str:
+    return json.dumps(list(tags), ensure_ascii=False)
 
 
 def _id_for(relpath: Path) -> str:
@@ -80,7 +88,14 @@ def _collect(memory_path: Path):
 
 
 def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
-    """Insert all bundle entries into the index -> (inserted, updated, errors)."""
+    """Sync the bundle into the index -> (inserted, updated, errors).
+
+    Existing rows (matched by dedup key) keep their ids; content, tags and
+    metadata are refreshed from the files. Sources match by ``source_url``,
+    never by path. Profile rows have no files and are preserved untouched.
+    File tags are validated through the vocabulary authority (valid new tags
+    registered, historical invalids kept and reported).
+    """
     store = _store_mod.MemoryStore(storage_path=memory_path)
     store.initialize()
 
@@ -89,34 +104,68 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
         print("No entries found in bundle; nothing to do.", file=sys.stderr)
         return 0, 0, errors
 
+    vocab = _store_mod.load_vocabulary(memory_path)
+    vocab_new: list[str] = []
     n_inserted = n_updated = 0
+
+    def _refresh(where_col: str, where_val: str, new_dedup: bool) -> None:
+        # Preserve the id; refresh content/tags/metadata in place.
+        sets = ["content = ?", "tags = ?", "confidence = ?"]
+        params: list = [e["content"], _json_dumps(canon), float(e["confidence"] or 1.0)]
+        if new_dedup:
+            sets.append("dedup_key = ?")
+            params.append(dedup_key)
+        sets += ["openspec_change_id = ?", "updated_at = ?"]
+        params += [e["openspec_change_id"], e["updated_at"]]
+        store.db.execute(
+            f"UPDATE entries SET {', '.join(sets)} WHERE {where_col} = ?",
+            (*params, where_val),
+        )
+        store.db.commit()
+
     for singular, project, relpath, e in entries:
         try:
-            dedup_key = (
-                store._make_dedup_key(singular, project, e["content"])
-                if singular != "source"
-                else _id_for(relpath)
-            )
+            if singular == "source":
+                url = (e.get("source_url") or "").strip()
+                dedup_key = f"source:url:{url}" if url else _id_for(relpath)
+                row_id = Path(relpath).stem
+            else:
+                dedup_key = store._make_dedup_key(singular, project, e["content"])
+                row_id = _id_for(relpath)
+            file_tags = _store_mod._tags_list(e.get("tags"))
+            try:
+                canon, new = _store_mod.normalize_tags(
+                    file_tags, vocab, register=True
+                )
+                vocab_new = _store_mod.stable_union(vocab_new, new)
+            except _store_mod.VocabularyError as exc:
+                # Historical invalid tags: keep the file's tags verbatim,
+                # refresh everything else, report the row.
+                canon = file_tags
+                errors.append(f"invalid tags kept: {project}/{relpath}: {exc}")
             existing = store.db.execute(
-                "SELECT id FROM entries WHERE dedup_key = ?", (dedup_key,)
+                "SELECT * FROM entries WHERE dedup_key = ?", (dedup_key,)
             ).fetchone()
             if existing:
-                if existing["id"] != _id_for(relpath):
-                    # Same content already indexed (bundle duplicates collapse):
-                    # adopt this file's id so re-runs converge, keep row content.
-                    store.db.execute(
-                        "UPDATE entries SET id = ?, created_at = ?, updated_at = ? WHERE dedup_key = ?",
-                        (_id_for(relpath), e["created_at"], e["updated_at"], dedup_key),
-                    )
-                    store.db.commit()
+                _refresh("dedup_key", dedup_key, new_dedup=False)
+                n_updated += 1
+                continue
+            clash = store.db.execute(
+                "SELECT dedup_key FROM entries WHERE id = ?", (row_id,)
+            ).fetchone()
+            if clash:
+                # Body edited: the content-derived dedup key changed and the
+                # lookup above missed. Refresh the path-id row in place —
+                # refusing would leave the index stale forever.
+                _refresh("id", row_id, new_dedup=True)
                 n_updated += 1
                 continue
             store._insert_row(
-                _id_for(relpath),
+                row_id,
                 singular,
                 project,
                 e["content"],
-                e["tags"],
+                _json_dumps(canon),
                 float(e["confidence"] or 1.0),
                 e["openspec_change_id"],
                 dedup_key,
@@ -126,6 +175,9 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
             n_inserted += 1
         except Exception as exc:  # noqa: BLE001 — one bad file must not stop the rebuild
             errors.append(f"failed: {project}/{relpath}: {exc}")
+    if vocab_new:
+        with _store_mod.vault_write_lock(memory_path):
+            _store_mod.save_vocabulary(memory_path, vocab)
     return n_inserted, n_updated, errors
 
 

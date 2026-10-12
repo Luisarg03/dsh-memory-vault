@@ -21,15 +21,13 @@ search first (step 3).
 
 ## 1. Resolve the project
 
-`project` is the folder key under `<vault>/projects/`; a misspelled name silently creates a
-new project:
+`project` is the folder key under `<vault>/projects/` (nested keys like `<org>/<repo>`
+work); a misspelled name silently creates a new project, so verify — never guess:
 
-```sh
-ls "${DSH_MEMORY_PATH:-$HOME/.memories}"/projects/
-```
-
-It is not always the repo basename — it can be the `package.json` name, a curated name, or
-a nested path (`<org>/<repo>`). Reuse the key the vault already uses for this work.
+1. `Memory project:` in the closest `AGENTS.md` walking up from the cwd wins.
+2. Otherwise list the vault and match: `ls "${DSH_MEMORY_PATH:-$HOME/.memories}"/projects/`.
+3. It is not always the repo basename — it can be the `package.json` name or a curated name. Reuse the key the vault already uses for this work.
+4. Unknown or ambiguous? Ask before writing. Do not infer a new project key.
 
 ## 2. Decide what qualifies
 
@@ -51,11 +49,18 @@ qualifies, say so and write nothing — an empty checkpoint is a valid outcome.
 `(project, entry_type, content)` over normalized content: resending the same text with
 different casing **updates** the existing entry; changing one word creates a **new** one.
 
+Then consult the tag catalog thematically — never dump it whole:
+
+- `list_tags` with a `query` for the session topic (bounded, default limit 20) to find reusable tags and aliases.
+- Reuse a known tag or alias whenever one fits the concept.
+- Coin a NEW lowercase-kebab tag for any concept none covers. Ordinary new tags need **no approval** and never block the write: the server normalizes aliases and records newcomers centrally.
+
 ## 4. Write
 
 - `content`: **one paragraph** — no headings, no lists, no markdown structure.
-- `tags`: lowercase-kebab, at least one (`architecture`, `python`, `testing`, `ci`…).
+- `tags`: lowercase-kebab, at least one (`architecture`, `python`, `testing`, `ci`…). Send them as chosen: the server returns the final `tags` plus `new_tags`.
 - `confidence` only has an effect on `store_fact`; the other tools accept and ignore it.
+- Re-storing identical content **unions** the new tags with the stored entry (Markdown and index stay in sync); sending `tags: []` never erases existing tags.
 - `store_profile` is **not** used here: it replaces a project's whole profile entry (one
   per project, no Markdown written). The profile layer has its own procedure.
 
@@ -71,5 +76,7 @@ git add -A && git commit -m "memory(<project>): <what changed and why>"
 Follow whatever commit convention the vault's own history uses, and do not push unless
 asked: with no remote configured, the commit is the end of the line.
 
-Report 5–10 lines: what was written (tool + description), what was left out and why, and
+Report 5–10 lines: what was written (tool + description), for each entry which tags were
+reused vs new **as the store response actually reported them** (never claim a tag is new
+when the response normalized it to an existing one), what was left out and why, and
 what could not be verified.
