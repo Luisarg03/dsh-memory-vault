@@ -3,8 +3,10 @@
 Implements openspec/specs/auto-session-digest/spec.md. Extracts decisions,
 facts, and learnings from a session transcript using a structured LLM call,
 validates the response against a JSON schema, repairs common JSON formatting
-issues, applies tag-vocabulary normalization, scores confidence, and upserts
-each entry to the memory store.
+issues, scores confidence, and upserts each entry to the memory store.
+
+Tags pass through verbatim: the store is the sole normalizer (aliases and
+new tags centrally). Unknown tags are valid and never discarded locally.
 
 Usage:
     digest-session --transcript PATH --project NAME
@@ -87,10 +89,17 @@ Return a JSON array. Each element must have exactly:
   - "content": a single-paragraph statement (no headings, no lists)
   - "context": situational trigger or constraint that motivated it (1 sentence, if none use "")
   - "description": a one-sentence summary of `content` (queryable)
-  - "tags": an array of lowercase-kebab tags (prefer canonical from tag-vocabulary.json; never empty if possible, use at least 1 tag like architecture/python/testing)
+  - "tags": an array of lowercase-kebab tags (reuse known tags when they fit; coin a NEW one for any concept none covers — never empty if possible, use at least 1 tag like architecture/python/testing)
   - "confidence": a number 0.0-1.0
   - "quality_hint": short note why high/low signal (optional)
   - "openspec_change_id": (optional) the OpenSpec change name (slug like "fix-memory-store-dedup") if the transcript mentions which change is being worked on
+
+Tagging: new tags need no approval. The store normalizes aliases and new
+tags centrally — send every tag the model produced, verbatim.
+
+Known tags (reuse one when it fits the concept; coin a NEW lowercase-kebab
+tag for anything none covers):
+{catalog}
 
 Rules:
 - Skip trivial exchanges (greetings, "ok", "thanks", or anything with no project knowledge).
@@ -346,6 +355,10 @@ class OpenCodeLLMClient:
 
 
 # ── Tag vocabulary ────────────────────────────────────────────────────────
+# Deprecated: the store is the sole tag normalizer (aliases + new tags,
+# centrally). Local filtering used to discard unknown tags here, which is
+# exactly the silent loss the server contract forbids. Kept as a thin shim so
+# existing imports keep working; extract_entries no longer consults it.
 
 
 @dataclass
@@ -362,25 +375,15 @@ class TagVocabulary:
         return cls(canonical=canonical, aliases=aliases, raw=data)
 
     def normalize(self, tags: list[str]) -> tuple[list[str], list[str]]:
-        """Return (normalized_tags, unknown_tags)."""
-        normalized: list[str] = []
-        unknown: list[str] = []
+        """Deprecated pass-through: returns (tags, []) — the store normalizes."""
+        seen: set[str] = set()
+        out: list[str] = []
         for t in tags:
-            key = t.lower()
-            if key in self.aliases:
-                normalized.append(self.aliases[key])
-            elif key in self.canonical:
-                normalized.append(key)
-            else:
-                unknown.append(key)
-        # Dedup, preserve order
-        seen = set()
-        out = []
-        for t in normalized:
-            if t not in seen:
-                seen.add(t)
-                out.append(t)
-        return out, unknown
+            key = str(t).strip()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(key)
+        return out, []
 
 
 # ── Project alias resolution ──────────────────────────────────────────────
@@ -459,6 +462,46 @@ def ensure_okf_compliance(
 # ── Main extraction pipeline ──────────────────────────────────────────────
 
 
+_CATALOG_QUERY_MAX = 200
+_CATALOG_LIMIT = 20
+
+
+def _derive_catalog_query(project: str, transcript: str) -> str:
+    """Bounded relevance query for the tag catalog: project + transcript head."""
+    head = " ".join((transcript or "").split())[:_CATALOG_QUERY_MAX]
+    return f"{project} {head}".strip()[:_CATALOG_QUERY_MAX]
+
+
+def _render_tag_catalog(tags: list[dict]) -> str:
+    """Render catalog entries as `- name (aka a, b)` lines; blanks dropped."""
+    lines = []
+    for t in tags or []:
+        name = str(t.get("name", "")).strip() if isinstance(t, dict) else str(t).strip()
+        if not name:
+            continue
+        aliases = [str(a) for a in (t.get("aliases") or []) if isinstance(t, dict) and str(a).strip()]
+        lines.append(f"- {name} (aka {', '.join(aliases)})" if aliases else f"- {name}")
+    return "\n".join(lines)
+
+
+def _fetch_tag_catalog(store, project: str, transcript: str) -> str:
+    """Fetch the relevant tag slice via MemoryStore.list_tags (central authority).
+
+    Bounded query, warning + empty-catalog fallback on any failure so
+    extraction continues. Unknown tags stay valid — the catalog only informs
+    reuse, it never filters.
+    """
+    try:
+        res = store.list_tags(query=_derive_catalog_query(project, transcript), limit=_CATALOG_LIMIT) or {}
+        rendered = _render_tag_catalog(res.get("tags") if isinstance(res, dict) else res)
+        if res.get("truncated") if isinstance(res, dict) else False:
+            log.warning("tag catalog truncated to %d entries", _CATALOG_LIMIT)
+        return rendered
+    except Exception as e:
+        log.warning("tag catalog unavailable, continuing without it: %s", e)
+        return ""
+
+
 @dataclass
 class DigestResult:
     upserted: int
@@ -486,7 +529,13 @@ def extract_entries(
     now: datetime | None = None,
 ) -> DigestResult:
     """Run the full extraction pipeline. Never raises on parse/retry failure;
-    logs and returns zero-upsert result instead."""
+    logs and returns zero-upsert result instead.
+
+    `tag_vocab` is accepted for backwards compatibility and ignored: the
+    store normalizes tags centrally. The relevant catalog is fetched live
+    from `store.list_tags` (bounded query) before extraction — see
+    `_fetch_tag_catalog`.
+    """
     if not transcript or not transcript.strip():
         log.info("empty transcript; zero writes")
         return DigestResult(0, 0, [], "")
@@ -499,6 +548,12 @@ def extract_entries(
     if len(transcript.strip()) < 200:
         log.info("transcript too short for memorable content; zero writes")
         return DigestResult(0, 0, [], "")
+
+    # Relevant catalog BEFORE extraction: bounded query over project +
+    # transcript head, fetched from the central authority (MemoryStore).
+    # Failure warns and falls back to free tagging — extraction continues.
+    catalog = _fetch_tag_catalog(store, project, transcript)
+    catalog_section = catalog if catalog else "(catalog unavailable — reuse your best-guess tags, coin NEW ones freely)"
 
     # LLM call (retries handled inside OpenCodeLLMClient) + chunk if >50k
     truncated = len(transcript) > 50_000
@@ -520,7 +575,7 @@ def extract_entries(
     raws: list[str] = []
     response_time = 0.0
     for idx, chk in enumerate(chunks):
-        prompt = EXTRACTION_PROMPT.format(transcript=chk[:50_000])
+        prompt = EXTRACTION_PROMPT.format(transcript=chk[:50_000], catalog=catalog_section)
         t0 = time.monotonic()
         try:
             raw_part = llm.complete(prompt, response_format="json")
@@ -553,19 +608,24 @@ def extract_entries(
         log.info("no memorable content found")
         return DigestResult(0, 0, [], raw)
 
-    # Apply tag vocabulary + confidence scoring + OKF compliance + upsert
-    vocab = tag_vocab or TagVocabulary(set(), {}, {})
+    # Tags pass through verbatim: the store normalizes aliases and records
+    # new tags centrally (its response carries final tags + new_tags).
+    # Unknown tags are valid — never discard them locally.
     unknown_all: list[str] = []
     timestamp = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
     upserted = 0
     skipped = 0
 
     for entry in entries:
-        # Tag normalization
-        normalized, unknown = vocab.normalize(entry.get("tags", []))
-        unknown_all.extend(unknown)
-        if unknown:
-            log.info("unknown tags for review: %s", unknown)
+        # Tag pass-through (dedup, order-preserving). No local vocabulary
+        # filtering: every tag the model produced reaches the store.
+        seen_tags: set[str] = set()
+        passthrough: list[str] = []
+        for t in entry.get("tags", []) or []:
+            key = str(t).strip()
+            if key and key not in seen_tags:
+                seen_tags.add(key)
+                passthrough.append(key)
 
         # Confidence scoring v2
         confidence = score_confidence(
@@ -587,7 +647,7 @@ def extract_entries(
         okf_entry = ensure_okf_compliance(
             {
                 **entry,
-                "tags": normalized,
+                "tags": passthrough,
                 "confidence": confidence,
             },
             default_confidence=confidence,

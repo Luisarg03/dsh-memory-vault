@@ -91,10 +91,53 @@ def handle_search_memory(store: MemoryStore, params: dict) -> str:
     entry_type = params.get("entry_type") or None
     tags = params.get("tags") or None
     query = params.get("query") or None
+    exclude_projects = params.get("exclude_projects") or None
     results = store.search_entries(
-        project=project, entry_type=entry_type, tags=tags, query=query
+        project=project,
+        entry_type=entry_type,
+        tags=tags,
+        query=query,
+        exclude_projects=exclude_projects,
     )
     return json.dumps(results)
+
+
+def handle_list_tags(store: MemoryStore, params: dict) -> str:
+    query = params.get("query") or None
+    project = params.get("project") or None
+    exclude_projects = params.get("exclude_projects") or None
+    limit = params.get("limit", 20)
+    return json.dumps(
+        store.list_tags(
+            query=query,
+            project=project,
+            exclude_projects=exclude_projects,
+            limit=limit,
+        )
+    )
+
+
+def handle_update_memory_tags(store: MemoryStore, params: dict) -> str:
+    project = params.get("project") or None
+    entry_type = _require(params, "entry_type")
+    entry_id = params.get("id") or params.get("entry_id")
+    if not entry_id:
+        raise ValueError("'id' is required and must not be empty")
+    tags = params.get("tags")
+    dry_run = params.get("dry_run", True)
+    if isinstance(dry_run, str):
+        dry_run = dry_run.strip().lower() not in ("false", "0", "no")
+    expected_revision = params.get("expected_revision") or None
+    return json.dumps(
+        store.update_memory_tags(
+            project=project,
+            entry_type=entry_type,
+            entry_id=entry_id,
+            tags=tags,
+            dry_run=bool(dry_run),
+            expected_revision=expected_revision,
+        )
+    )
 
 
 def _handle_store_typed(
@@ -209,6 +252,62 @@ def _tool_definitions() -> list[Tool]:
                     "entry_type": {"type": "string", "enum": valid_types},
                     "tags": {"type": "array", "items": {"type": "string"}},
                     "query": {"type": "string"},
+                    "exclude_projects": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Drop full (nested) project keys before matching.",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="list_tags",
+            description=(
+                "List vocabulary tags with usage counts. Query tokens OR-match "
+                "(case-insensitive literal) over names, aliases and descriptions. "
+                "Project/exclusion filters restrict to used tags; without them "
+                "zero-count tags appear too. Ordered: exact match, count desc, name."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "project": {"type": "string"},
+                    "exclude_projects": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 20,
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="update_memory_tags",
+            description=(
+                "Tags-only maintenance for one entry. Dry run by default: returns "
+                "before/after tags plus a revision hash without writing. To apply, "
+                "pass dry_run=false with the current expected_revision; tags are "
+                "replaced explicitly while body, URL, title, identity and original "
+                "dates are preserved."
+            ),
+            inputSchema={
+                "type": "object",
+                "required": ["entry_type", "id"],
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Required for memories/profiles; omit for sources.",
+                    },
+                    "entry_type": {"type": "string", "enum": valid_types},
+                    "id": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "dry_run": {"type": "boolean", "default": True},
+                    "expected_revision": {"type": "string"},
                 },
             },
         ),
@@ -372,6 +471,7 @@ def _tool_definitions() -> list[Tool]:
             name="export_memories",
             description=(
                 "Export every stored entry for one project, newest first, with no result limit. "
+                "Includes the DB profile. "
                 "Use for a full project dump, not for lookups — search_memory is cheaper."
             ),
             inputSchema={
@@ -419,6 +519,8 @@ def create_app(store: MemoryStore) -> Server:
     tool_defs = _tool_definitions()
     handlers = {
         "search_memory": handle_search_memory,
+        "list_tags": handle_list_tags,
+        "update_memory_tags": handle_update_memory_tags,
         "store_decision": handle_store_decision,
         "store_fact": handle_store_fact,
         "store_learning": handle_store_learning,

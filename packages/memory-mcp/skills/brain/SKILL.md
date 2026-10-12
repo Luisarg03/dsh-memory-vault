@@ -28,24 +28,26 @@ and do not depend on the cwd.
 
 ## 2. Resolve the project
 
-`project` is the folder key under `<vault>/projects/`. A misspelled name silently creates
-a new project — there is no validation against a list — so list before filtering:
+`project` is the folder key under `<vault>/projects/` (nested keys like `<org>/<repo>`
+work). A misspelled name silently creates a new project elsewhere — there is no
+validation against a list — so verify before filtering:
 
-```sh
-ls "${DSH_MEMORY_PATH:-$HOME/.memories}"/projects/
-```
-
-The key is **not necessarily the repo basename**: it can be the `package.json` name, a
-curated human name, or a nested path (`<org>/<repo>`). When unsure, search **without**
-`project` (that scans every project) and narrow afterwards.
+1. `Memory project:` in the closest `AGENTS.md` walking up from the cwd wins.
+2. Otherwise verify against the vault key: `ls "${DSH_MEMORY_PATH:-$HOME/.memories}"/projects/`.
+3. The key is **not necessarily the repo basename**: it can be the `package.json` name, a
+   curated human name, or a nested path. When unsure, search **without**
+   `project` (that scans every project) and narrow afterwards.
+4. Unknown or ambiguous — including which projects to exclude (step 6)? Ask. Never infer
+   a new project key.
 
 ## 3. Pick the tool
 
 | Need | Tool | Note |
 |---|---|---|
 | A topic, a decision, a bug, "what do you know about X" | `search_memory` | `query` is tokenized and **OR**-matched, ranked by relevance — not an exact phrase |
+| Which tags exist for a topic | `list_tags` | thematic `query`, bounded `limit` (default 20, max 50); reuse instead of loading everything |
 | Who the user is, the profile, the stack | `get_profile` | profile entries for one project |
-| Everything about one project | `export_memories` | no limit; for dumps, not lookups |
+| Everything about one project | `export_memories` | needs `project`; no limit; for dumps, not lookups |
 | Is the server reachable? | `ping` | health check |
 
 Traps that cost real time:
@@ -57,8 +59,11 @@ Traps that cost real time:
 - `tags` is **OR** as well: `["ci","release"]` returns entries carrying *either* tag.
 - `search_memory` returns **at most 50** entries. For a whole project, use
   `export_memories`.
-- `source` entries are excluded from every filtered search: only `entry_type="source"`
-  with no other filter returns them.
+- Sharing a generic tag (`python`, `backend`) is **not** by itself a connection: it only
+  counts with topical relevance behind it.
+- Sources are global and opt-in: only `entry_type="source"` **without** `project`
+  returns them (with `query`/`tags` narrowing). `entry_type="source"` **with** a project
+  is an error. Never present a source as belonging to a project.
 
 ## 4. Profile layers are documents, not index entries
 
@@ -68,7 +73,31 @@ A vault may keep a profile layer: a `profile/` directory inside a project, usual
 something else: internal metadata rows that live only in SQLite and write no Markdown, so
 an index rebuild from Markdown cannot recover them.
 
-## 5. Answer
+## 5. Local context first
+
+1. `get_profile` for the resolved project.
+2. Topic search inside the project (`search_memory` with `project`, or `export_memories`
+   as fallback for a full dump).
+3. Local rules always prevail: external experience never overrides them.
+
+## 6. Then external antecedents — always, and separately
+
+Even when the local context looks sufficient, always run one bounded cross-project pass:
+`search_memory` (and/or `list_tags`) by topic/tags **without** `project`, excluding the
+local project plus any agreed exclusions via `exclude_projects`. Exclusions are exact
+project keys (nested paths in full) and the server applies them **before** retrieving
+results and before the limit — excluded projects never leak in through counts or origins.
+
+- **With a task:** aim the pass at the problem at hand.
+- **Without a task:** aim it at the project's open topics and risks.
+- Rank by relevance first; learnings break ties, they do not outrank relevance.
+
+Answer with a separate antecedents block: up to **3** brief items is the suggested
+starting default — not a quota. Zero when nothing earns it; say so explicitly instead of
+forcing a connection. Each item names its origin **project** and **why** it matters for
+this work.
+
+## 7. Answer
 
 - Cite project + entry (its description or first line). Quote; do not paraphrase a claim
   into something stronger than it is.

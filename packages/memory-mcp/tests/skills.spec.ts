@@ -125,3 +125,48 @@ describe('memory-mcp skill wiring', () => {
     expect(skill.content).toContain('read from the vault')
   })
 })
+
+describe('skill contract: tags and cross-project behavior', () => {
+  async function body(name: string): Promise<string> {
+    const candidates = await skillsProvider.list({})
+    const candidate = candidates.find(candidate => candidate.name === name)
+    if (candidate === undefined) throw new Error(`no candidate for ${name}`)
+    const skill = await skillsProvider.get(candidate, {})
+    return skill.content
+  }
+
+  it('checkpoint reuses catalog tags, allows new ones, and reports the true response', async () => {
+    const content = await body('checkpoint')
+    expect(content).toContain('list_tags')
+    expect(content).toContain('no approval')
+    expect(content).toContain('new_tags')
+    expect(content).toContain('Memory project:')
+    expect(content).toContain('do not push')
+  })
+
+  it('checkpoint documents duplicate-store union and no-erase', async () => {
+    const content = await body('checkpoint')
+    expect(content).toContain('unions')
+    expect(content).toContain('never erases')
+  })
+
+  it('brain separates local context from bounded external antecedents', async () => {
+    const content = await body('brain')
+    expect(content).toContain('get_profile')
+    expect(content).toContain('exclude_projects')
+    expect(content).toContain('before')
+    expect(content).toContain('3')
+    expect(content).toContain('always prevail')
+    expect(content).toContain('generic tag')
+  })
+
+  it('brain documents the 50-cap, zero case, generic-tag and source rules', async () => {
+    const content = await body('brain')
+    expect(content).toContain('at most 50')
+    expect(content).toContain('Zero when nothing earns it')
+    expect(content).toContain('not** by itself a connection')
+    expect(content).toContain('without** `project`')
+    expect(content).toContain('is an error')
+    expect(content).toContain('exact')
+  })
+})

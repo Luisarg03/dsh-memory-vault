@@ -7,8 +7,9 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, basename } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, basename, dirname } from "node:path";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -74,6 +75,119 @@ export function isSupportedVersion(version: string): boolean {
 }
 
 // ── Project name resolution ──────────────────────────────────────────────
+
+/**
+ * Parse a `Memory project: <key>` declaration from AGENTS.md text.
+ * Returns the trimmed key, or null when absent/empty.
+ */
+export function parseMemoryProjectDeclaration(text: string): string | null {
+  const m = text.match(/^\s*Memory project:\s*(.+?)\s*$/m);
+  if (!m) return null;
+  const key = (m[1] ?? "").trim();
+  return key ? key : null;
+}
+
+/** Vault root honoring the real env (`DSH_MEMORY_PATH`, then `MEMORY_PATH`). */
+export function defaultVaultPath(): string {
+  const env = process.env.DSH_MEMORY_PATH ?? process.env.MEMORY_PATH ?? "";
+  if (env.trim()) return env.trim();
+  return join(homedir(), ".memories");
+}
+
+/** True when `key` (nested `org/repo` supported) exists under the vault. */
+export function verifyProjectKey(vaultPath: string, key: string): boolean {
+  if (!key.trim()) return false;
+  try {
+    return existsSync(join(vaultPath, "projects", key));
+  } catch {
+    return false;
+  }
+}
+
+/** Best-effort list of vault project keys (for actionable error messages). */
+export function listVaultProjects(vaultPath: string): string[] {
+  try {
+    return readdirSync(join(vaultPath, "projects"), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+export interface ProjectResolution {
+  key: string;
+  source: "configured" | "agents" | "heuristic";
+  verified: boolean;
+  message: string;
+}
+
+/**
+ * Resolve the vault project key for `cwd`.
+ * Priority: explicit `configuredProject` > `Memory project:` in the closest
+ * AGENTS.md walking up > legacy `resolveProjectName` heuristics.
+ * The key is ALWAYS verified against the vault: an unverified key is returned
+ * with `verified: false` and an actionable message (never silently create a
+ * project on a typo — the caller must surface the message).
+ */
+export async function resolveProjectKey(
+  cwd: string,
+  opts: { vaultPath?: string; configuredProject?: string } = {},
+): Promise<ProjectResolution> {
+  const vaultPath = opts.vaultPath ?? defaultVaultPath();
+  const configured = opts.configuredProject?.trim();
+  if (configured) {
+    const verified = verifyProjectKey(vaultPath, configured);
+    return {
+      key: configured,
+      source: "configured",
+      verified,
+      message: verified
+        ? `project "${configured}" verified in vault`
+        : `project "${configured}" is not in ${join(vaultPath, "projects")}; ` +
+          `check spelling, or declare it with \`Memory project:\` in the closest AGENTS.md`,
+    };
+  }
+  // Closest AGENTS.md walking up from cwd.
+  let dir = cwd;
+  for (;;) {
+    const candidate = join(dir, "AGENTS.md");
+    if (existsSync(candidate)) {
+      try {
+        const declared = parseMemoryProjectDeclaration(await readFile(candidate, "utf-8"));
+        if (declared) {
+          const verified = verifyProjectKey(vaultPath, declared);
+          return {
+            key: declared,
+            source: "agents",
+            verified,
+            message: verified
+              ? `project "${declared}" from ${candidate}`
+              : `AGENTS.md at ${candidate} declares "Memory project: ${declared}", ` +
+                `which is not in ${join(vaultPath, "projects")}; check spelling or create it explicitly`,
+          };
+        }
+      } catch {
+        // unreadable AGENTS.md: keep walking up
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const fallback = await resolveProjectName(cwd);
+  const verified = verifyProjectKey(vaultPath, fallback);
+  return {
+    key: fallback,
+    source: "heuristic",
+    verified,
+    message: verified
+      ? `project "${fallback}" verified in vault`
+      : `project "${fallback}" was inferred and is not in ${join(vaultPath, "projects")}; ` +
+        `declare the key with \`Memory project:\` in the closest AGENTS.md ` +
+        `(verified keys: ${listVaultProjects(vaultPath).slice(0, 10).join(", ") || "(none listed)"})`,
+  };
+}
 
 /**
  * Resolve the project name from a working directory.
@@ -228,6 +342,26 @@ export interface ValidEntry {
   openspec_change_id: string | null
 }
 
+/** One `list_tags` catalog row (server is the canonical vocabulary). */
+export interface TagCatalogEntry {
+  name: string
+  aliases?: string[]
+  count?: number
+  description?: string
+}
+
+/** Render catalog rows as prompt lines (`name (aka a, b)`); empty in, empty out. */
+export function formatTagCatalog(tags: TagCatalogEntry[]): string {
+  return tags
+    .filter((t) => typeof t?.name === "string" && t.name.trim())
+    .slice(0, 40)
+    .map((t) => {
+      const aliases = (t.aliases ?? []).filter((a) => typeof a === "string" && a.trim());
+      return aliases.length > 0 ? `- ${t.name} (aka ${aliases.join(", ")})` : `- ${t.name}`;
+    })
+    .join("\n");
+}
+
 /** Optional vault context files to embed in the extraction prompt. */
 export interface DigestContextFiles {
   criticalFacts?: string
@@ -243,6 +377,7 @@ export function buildExtractionPrompt(
   project: string,
   transcript: string,
   contextFiles: DigestContextFiles = {},
+  tagCatalog: TagCatalogEntry[] = [],
 ): { system: string; user: string } {
   const sysParts: string[] = [
     'You are an assistant that extracts durable knowledge from a session transcript.',
@@ -264,6 +399,16 @@ export function buildExtractionPrompt(
     '  - "tags": an array of lowercase-kebab tags (never empty if possible, at least 1 like architecture/python/testing)',
     '  - "confidence": a number 0.0-1.0',
     '  - "openspec_change_id": (optional) the change slug if the transcript names it',
+    '',
+    'Tagging: reuse known tags when they fit; coin a NEW lowercase-kebab tag for',
+    'any concept no known tag covers. New tags need no approval — the vault',
+    'server normalizes aliases and records newcomers centrally.',
+  )
+  const known = formatTagCatalog(tagCatalog);
+  if (known) {
+    sysParts.push('', 'Known tags (reuse on fit):', known);
+  }
+  sysParts.push(
     '',
     'Rules:',
     ...ENTRY_SELECTION_RULES.map((r) => `- ${r}`),
@@ -389,6 +534,10 @@ export const __testing = {
   createSessionState,
   isSupportedVersion,
   resolveProjectName,
+  resolveProjectKey,
+  parseMemoryProjectDeclaration,
+  verifyProjectKey,
+  formatTagCatalog,
   idleCheckpoint,
   compactingCheckpoint,
   isGitCommit,

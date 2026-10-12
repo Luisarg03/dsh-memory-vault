@@ -10,12 +10,16 @@ import {
   compactingCheckpoint,
   createSessionState,
   EXTRACTABLE_TYPES,
+  formatTagCatalog,
   idleCheckpoint,
   isGitCommit,
   isSupportedVersion,
+  parseMemoryProjectDeclaration,
   repairJson,
+  resolveProjectKey,
   resolveProjectName,
   validateEntries,
+  verifyProjectKey,
   type SessionState,
 } from '../src/pure.js'
 
@@ -266,5 +270,117 @@ describe('validateEntries', () => {
   it('returns [] for non-arrays', () => {
     expect(validateEntries({})).toEqual([])
     expect(validateEntries(null)).toEqual([])
+  })
+})
+
+describe('parseMemoryProjectDeclaration', () => {
+  it('extracts the declared key', () => {
+    expect(parseMemoryProjectDeclaration('# AGENTS\nMemory project: my-proj\n')).toBe('my-proj')
+    expect(parseMemoryProjectDeclaration('Memory project: org/repo')).toBe('org/repo')
+  })
+
+  it('returns null when absent or empty', () => {
+    expect(parseMemoryProjectDeclaration('# no declaration here\n')).toBeNull()
+    expect(parseMemoryProjectDeclaration('Memory project:   \n')).toBeNull()
+  })
+})
+
+describe('formatTagCatalog', () => {
+  it('renders names with aliases and drops blanks', () => {
+    const out = formatTagCatalog([
+      { name: 'ci', aliases: ['continuous-integration'] },
+      { name: 'python' },
+      { name: '   ' },
+    ])
+    expect(out).toContain('- ci (aka continuous-integration)')
+    expect(out).toContain('- python')
+  })
+
+  it('returns empty for empty input', () => {
+    expect(formatTagCatalog([])).toBe('')
+  })
+})
+
+describe('buildExtractionPrompt with catalog', () => {
+  it('embeds known tags and permits new ones', () => {
+    const { system } = buildExtractionPrompt('p', 't', {}, [
+      { name: 'ci', aliases: ['continuous-integration'] },
+    ])
+    expect(system).toContain('Known tags')
+    expect(system).toContain('- ci (aka continuous-integration)')
+    expect(system).toContain('NEW lowercase-kebab tag')
+    expect(system).toContain('no approval')
+  })
+
+  it('stays backwards compatible without a catalog', () => {
+    const { system } = buildExtractionPrompt('p', 't')
+    expect(system).not.toContain('Known tags')
+    expect(system).toContain('NEW lowercase-kebab tag')
+  })
+})
+
+describe('resolveProjectKey', () => {
+  const dirs: string[] = []
+
+  function fixture(): string {
+    const d = mkdtempSync(join(tmpdir(), 'memkey-'))
+    dirs.push(d)
+    return d
+  }
+
+  function vaultWith(...keys: string[]): string {
+    const v = fixture()
+    for (const k of keys) mkdirSync(join(v, 'projects', k), { recursive: true })
+    return v
+  }
+
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true })
+  })
+
+  it('prefers the closest AGENTS.md declaration when verified', async () => {
+    const vault = vaultWith('declared-proj')
+    const work = fixture()
+    writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'from-package' }))
+    writeFileSync(join(work, 'AGENTS.md'), '# x\nMemory project: declared-proj\n')
+    const r = await resolveProjectKey(work, { vaultPath: vault })
+    expect(r.key).toBe('declared-proj')
+    expect(r.source).toBe('agents')
+    expect(r.verified).toBe(true)
+  })
+
+  it('supports nested keys', async () => {
+    const vault = vaultWith('org/repo')
+    const work = fixture()
+    writeFileSync(join(work, 'AGENTS.md'), 'Memory project: org/repo\n')
+    const r = await resolveProjectKey(work, { vaultPath: vault })
+    expect(r).toMatchObject({ key: 'org/repo', source: 'agents', verified: true })
+    expect(verifyProjectKey(vault, 'org/repo')).toBe(true)
+  })
+
+  it('flags an unknown project instead of silently creating it', async () => {
+    const vault = vaultWith('real-proj')
+    const work = fixture()
+    writeFileSync(join(work, 'AGENTS.md'), 'Memory project: typo-proj\n')
+    const r = await resolveProjectKey(work, { vaultPath: vault })
+    expect(r.key).toBe('typo-proj')
+    expect(r.verified).toBe(false)
+    expect(r.message).toContain('typo-proj')
+  })
+
+  it('falls back to heuristics with an actionable message when undeclared', async () => {
+    const vault = vaultWith('elsewhere')
+    const work = fixture()
+    const r = await resolveProjectKey(work, { vaultPath: vault })
+    expect(r.source).toBe('heuristic')
+    expect(r.verified).toBe(false)
+    expect(r.message).toContain('Memory project:')
+  })
+
+  it('honors an explicitly configured project', async () => {
+    const vault = vaultWith('cfg-proj')
+    const work = fixture()
+    const r = await resolveProjectKey(work, { vaultPath: vault, configuredProject: 'cfg-proj' })
+    expect(r).toMatchObject({ key: 'cfg-proj', source: 'configured', verified: true })
   })
 })

@@ -19,6 +19,7 @@ import {
   chunkTranscript,
   repairJson,
   validateEntries,
+  type TagCatalogEntry,
   type ValidEntry,
 } from './pure.js'
 
@@ -31,9 +32,83 @@ const MIN_DIGEST_TRANSCRIPT_CHARS = 200
 const LLM_RETRIES = 3
 const LLM_RETRY_DELAYS_MS = [2_000, 5_000]
 const MCP_CALL_TIMEOUT_MS = 60_000
+const TAG_CATALOG_LIMIT = 20
+const TAG_CATALOG_QUERY_CHARS = 200
 
 function log(msg: string) {
   console.log(`[memory-auto] ${msg}`)
+}
+
+/**
+ * Bounded topic query for `list_tags`: project plus the head of the
+ * transcript, collapsed to one line. Never the whole catalog, never the
+ * whole transcript.
+ */
+export function deriveCatalogQuery(project: string, transcript: string, maxChars = TAG_CATALOG_QUERY_CHARS): string {
+  const flat = transcript.replace(/\s+/g, ' ').trim()
+  return `${project} ${flat}`.trim().slice(0, maxChars)
+}
+
+export interface TagCatalog {
+  tags: TagCatalogEntry[]
+  truncated: boolean
+}
+
+/** Pull one text blob out of a `tools/call` result, whatever its shape. */
+function toolText(result: unknown): string {
+  const r = result as any
+  if (typeof r === 'string') return r
+  if (Array.isArray(r?.content)) return r.content.map((c: any) => c?.text ?? '').join('')
+  if (typeof r?.content === 'string') return r.content
+  try {
+    return JSON.stringify(r)
+  } catch {
+    return ''
+  }
+}
+
+/** Normalize the shapes a `list_tags` result can take; null when unusable. */
+export function parseTagCatalog(result: unknown): TagCatalog | null {
+  try {
+    const parsed: any = JSON.parse(toolText(result))
+    const rows = Array.isArray(parsed) ? parsed : parsed?.tags
+    if (!Array.isArray(rows)) return null
+    const tags: TagCatalogEntry[] = rows
+      .filter((t: any) => typeof t?.name === 'string' && t.name.trim())
+      .map((t: any) => ({
+        name: String(t.name),
+        ...(Array.isArray(t.aliases) ? { aliases: t.aliases.filter((a: any) => typeof a === 'string') } : {}),
+        ...(typeof t.count === 'number' ? { count: t.count } : {}),
+        ...(typeof t.description === 'string' ? { description: t.description } : {}),
+      }))
+    const truncated = Array.isArray(parsed) ? false : parsed?.truncated === true
+    return { tags, truncated }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch the relevant tag catalog slice over an already-open client.
+ * Returns null on ANY failure (unknown tool on an old server included):
+ * the caller logs a warning and continues — validated server tags still
+ * normalize on write, so a catalog miss must never lose content.
+ */
+export async function fetchTagCatalog(
+  client: McpClient,
+  query: string,
+  opts: { project?: string; limit?: number } = {},
+): Promise<TagCatalog | null> {
+  try {
+    const result = await client.callTool('list_tags', {
+      ...(query.trim() ? { query: query.trim() } : {}),
+      ...(opts.project ? { project: opts.project } : {}),
+      limit: opts.limit ?? TAG_CATALOG_LIMIT,
+    })
+    return parseTagCatalog(result)
+  } catch {
+    return null
+  }
 }
 
 export function transcriptOfDSM(events: any[]): string {
@@ -100,8 +175,9 @@ export async function extractEntriesWithLlm(
   transcript: string,
   contextFiles?: { criticalFacts?: string; claude?: string },
   signal?: AbortSignal,
+  tagCatalog: TagCatalogEntry[] = [],
 ): Promise<ValidEntry[]> {
-  const { system, user } = buildExtractionPrompt(project, transcript, contextFiles)
+  const { system, user } = buildExtractionPrompt(project, transcript, contextFiles, tagCatalog)
   const assembler = new BlockAssembler()
   const messages: Message[] = [
     createUserMessage({
@@ -256,14 +332,17 @@ export function connectMcp(memoryPath: string, serverDir: string): Promise<McpCl
 
 /**
  * Write validated OKF entries through the vault server's `store_*` tools,
- * which upsert both the Markdown file and the SQLite FTS5 index.
+ * which upsert both the Markdown file and the SQLite FTS5 index. Tags pass
+ * through untouched: the server normalizes aliases/new tags centrally and
+ * reports them back (`tags` + `new_tags`), which we surface in the log.
  */
-export async function writeEntries(client: McpClient, project: string, entries: ValidEntry[]): Promise<{ upserted: number; failed: number }> {
+export async function writeEntries(client: McpClient, project: string, entries: ValidEntry[]): Promise<{ upserted: number; failed: number; newTags: string[] }> {
   let upserted = 0
   let failed = 0
+  const newTags: string[] = []
   for (const e of entries) {
     try {
-      await client.callTool(`store_${e.entry_type}`, {
+      const res: any = await client.callTool(`store_${e.entry_type}`, {
         project,
         content: e.content,
         ...(e.description ? { description: e.description } : {}),
@@ -274,17 +353,28 @@ export async function writeEntries(client: McpClient, project: string, entries: 
         ...(e.openspec_change_id ? { openspec_change_id: e.openspec_change_id } : {}),
       })
       upserted += 1
+      try {
+        const parsed = JSON.parse(toolText(res))
+        const nt = Array.isArray(parsed) ? [] : (parsed?.new_tags ?? parsed?.newTags ?? [])
+        for (const t of nt) {
+          if (typeof t === 'string' && t && !newTags.includes(t)) newTags.push(t)
+        }
+      } catch {
+        // old server without new_tags: nothing to collect, still a success
+      }
     } catch (err) {
       failed += 1
       console.warn(`[memory-auto] store_${e.entry_type} failed:`, err instanceof Error ? err.message : err)
     }
   }
-  return { upserted, failed }
+  return { upserted, failed, newTags }
 }
 
 /**
- * Full post-session digest: transcript -> ctx.llm extraction (with retries) ->
- * OKF writes via the vault MCP server. Never throws; logs the outcome.
+ * Full post-session digest: connect first, fetch the relevant tag slice,
+ * extract via ctx.llm (with retries), write via the same client. Never
+ * throws; logs the outcome with actual counts — storage failures are
+ * reported, never silently dropped.
  */
 export async function digestSessionDSM(
   ctx: Context,
@@ -295,6 +385,12 @@ export async function digestSessionDSM(
   events: any[],
   signal?: AbortSignal,
 ): Promise<void> {
+  // Direct-call boundary: the plugin gates on verified projects before
+  // calling, but never let an empty key reach the store (silent create).
+  if (!project?.trim()) {
+    log(`digest ${sessionId}: skip without verified project`)
+    return
+  }
   const header = `## context\nproject: ${project}\ndirectory: ${directory}\n`
   const transcript = (header + transcriptOfDSM(events)).trim()
   if (!transcript) {
@@ -306,34 +402,8 @@ export async function digestSessionDSM(
     return
   }
 
-  const chunks = chunkTranscript(transcript)
-  const entries: ValidEntry[] = []
-  for (const chunk of chunks) {
-    let attempt = 0
-    for (;;) {
-      try {
-        const got = await extractEntriesWithLlm(ctx, config, project, chunk, undefined, signal)
-        entries.push(...got)
-        break
-      } catch (err) {
-        attempt += 1
-        if (attempt >= LLM_RETRIES || signal?.aborted) {
-          console.warn(`[memory-auto] digest extraction failed after ${attempt} attempt(s):`, err instanceof Error ? err.message : err)
-          break
-        }
-        const delay = LLM_RETRY_DELAYS_MS[attempt - 1] ?? 5_000
-        log(`digest extraction retry ${attempt}/${LLM_RETRIES} in ${delay}ms`)
-        await new Promise((r) => setTimeout(r, delay))
-      }
-    }
-    if (signal?.aborted) break
-  }
-
-  if (entries.length === 0) {
-    log(`digest ${sessionId}: no entries extracted`)
-    return
-  }
-
+  // Connect BEFORE extraction: no point paying for the LLM call when the
+  // vault is unreachable, and one client serves catalog + storage.
   let client: McpClient
   try {
     client = await connectMcp(config.memoryPath, config.serverDir)
@@ -342,8 +412,45 @@ export async function digestSessionDSM(
     return
   }
   try {
-    const { upserted, failed } = await writeEntries(client, project, entries)
-    log(`digest ${sessionId}: ${upserted} upserted, ${failed} failed (${entries.length} extracted)`)
+    const catalog = await fetchTagCatalog(client, deriveCatalogQuery(project, transcript))
+    if (!catalog) {
+      console.warn(`[memory-auto] digest ${sessionId}: list_tags unavailable, extracting without known tags (server still normalizes on write)`)
+    }
+    const knownTags = catalog?.tags ?? []
+
+    const chunks = chunkTranscript(transcript)
+    const entries: ValidEntry[] = []
+    for (const chunk of chunks) {
+      let attempt = 0
+      for (;;) {
+        try {
+          const got = await extractEntriesWithLlm(ctx, config, project, chunk, undefined, signal, knownTags)
+          entries.push(...got)
+          break
+        } catch (err) {
+          attempt += 1
+          if (attempt >= LLM_RETRIES || signal?.aborted) {
+            console.warn(`[memory-auto] digest extraction failed after ${attempt} attempt(s):`, err instanceof Error ? err.message : err)
+            break
+          }
+          const delay = LLM_RETRY_DELAYS_MS[attempt - 1] ?? 5_000
+          log(`digest extraction retry ${attempt}/${LLM_RETRIES} in ${delay}ms`)
+          await new Promise((r) => setTimeout(r, delay))
+        }
+      }
+      if (signal?.aborted) break
+    }
+
+    if (entries.length === 0) {
+      log(`digest ${sessionId}: no entries extracted`)
+      return
+    }
+
+    const { upserted, failed, newTags } = await writeEntries(client, project, entries)
+    log(`digest ${sessionId}: ${upserted} upserted, ${failed} failed (${entries.length} extracted)${newTags.length > 0 ? ` new tags: ${newTags.join(', ')}` : ''}`)
+    if (failed > 0) {
+      console.warn(`[memory-auto] digest ${sessionId}: ${failed} entries NOT stored (see warnings above)`)
+    }
   } finally {
     await client.close().catch(() => {})
   }
