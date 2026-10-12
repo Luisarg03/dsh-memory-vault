@@ -20,7 +20,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import {
   createSessionState,
-  resolveProjectName,
+  resolveProjectKey,
   idleCheckpoint,
   compactingCheckpoint,
   isGitCommit,
@@ -151,7 +151,7 @@ export function apply(ctx: Context, config: Config) {
   const activities = new Map<string, string[]>()
   const queued = new Map<string, string>()
   const sessionDirs = new Map<string, string>()
-  const projectCache = new Map<string, string>()
+  const projectCache = new Map<string, string>() // verified keys only — never negatives
 
   const ACTIVITY_MAX_LINES = 20
   const ACTIVITY_MAX_CHARS = 80
@@ -170,13 +170,28 @@ export function apply(ctx: Context, config: Config) {
 
   const summary = (sid: string) => (activities.get(sid) ?? []).join('\n')
 
-  const projectFor = async (dir: string): Promise<string> => {
+  /**
+   * Shared choke point for every capture path. Returns null when the key is
+   * unverified: callers must STOP (no digest, no queued checkpoint) and keep
+   * the reason in their skip log. Negatives are never cached, so declaring
+   * the key (`Memory project:`) or creating the vault folder revalidates on
+   * the next call.
+   */
+  const projectFor = async (dir: string): Promise<string | null> => {
     const cached = projectCache.get(dir)
     if (cached) return cached
-    const p = await resolveProjectName(dir || process.cwd())
-    projectCache.set(dir, p)
-    return p
+    // Declared (`Memory project:` in the closest AGENTS.md) beats heuristics.
+    const resolved = await resolveProjectKey(dir || process.cwd(), { vaultPath: memoryPath })
+    if (!resolved.verified) {
+      console.warn(`[memory-auto] capture blocked: ${resolved.message}`)
+      return null
+    }
+    projectCache.set(dir, resolved.key)
+    return resolved.key
   }
+
+  const blockedReason = (sid: string, via: string) =>
+    `[memory-auto] ${via} skip ${sid}: no verified project (see the capture-blocked warning above for how to declare it)`
 
   // session/created -> init state
   ctx.on('session/created' as any, async (session: DSHSession) => {
@@ -185,11 +200,14 @@ export function apply(ctx: Context, config: Config) {
     if (!sid) return
     const proj = await projectFor(dir)
     if (!states.has(sid)) {
-      states.set(sid, createSessionState(proj))
+      // Track activity even while unresolved: write paths re-resolve (never a
+      // cached negative) and sync st.project, so fixing the key mid-session
+      // still captures everything tracked so far.
+      states.set(sid, createSessionState(proj ?? ''))
       activities.set(sid, [])
     }
     sessionDirs.set(sid, dir)
-    console.log(`[memory-auto] session created ${sid} project=${proj}`)
+    console.log(`[memory-auto] session created ${sid} project=${proj ?? '(unresolved)'}`)
   })
 
   // session/disposed -> digest
@@ -204,6 +222,11 @@ export function apply(ctx: Context, config: Config) {
     }
     const dir = sessionDirs.get(sid) ?? ''
     const proj = await projectFor(dir)
+    if (!proj) {
+      console.warn(blockedReason(sid, 'digest'))
+      return
+    }
+    st.project = proj
     const evts: DSHEvt[] = (session as any)?.events ?? []
     await digestSessionDSM(ctx, digestConfig, sid, dir, proj, evts)
   })
@@ -219,9 +242,16 @@ export function apply(ctx: Context, config: Config) {
     if (!st) return
     const text = idleCheckpoint(st, summary(sid))
     if (text) {
-      console.log(`[memory-auto] idle checkpoint digest for ${sid}`)
       const dir = sessionDirs.get(sid) ?? ''
       const proj = await projectFor(dir)
+      if (!proj) {
+        // Let a later idle retry once the key is fixed.
+        st.checkpointDelivered = false
+        console.warn(blockedReason(sid, 'idle checkpoint'))
+        return
+      }
+      console.log(`[memory-auto] idle checkpoint digest for ${sid}`)
+      st.project = proj
       const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
       await digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
     }
@@ -238,6 +268,12 @@ export function apply(ctx: Context, config: Config) {
     if (t === 'compaction/start') {
       const st = states.get(sid)
       if (!st) return
+      const proj = await projectFor(sessionDirs.get(sid) ?? '')
+      if (!proj) {
+        console.warn(blockedReason(sid, 'compaction checkpoint'))
+        return
+      }
+      st.project = proj
       const txt = compactingCheckpoint(st, summary(sid))
       if (txt) {
         console.log(`[memory-auto] compaction checkpoint queued for ${sid}`)
@@ -252,6 +288,12 @@ export function apply(ctx: Context, config: Config) {
       if (typeof cmd === 'string' && isGitCommit(cmd)) {
         const st = states.get(sid)
         if (st) {
+          const proj = await projectFor(sessionDirs.get(sid) ?? '')
+          if (!proj) {
+            console.warn(blockedReason(sid, 'commit checkpoint'))
+            return
+          }
+          st.project = proj
           st.hasActivity = true
           queued.set(sid, buildCommitCheckpointPrompt(st))
           console.log(`[memory-auto] git commit queued for ${sid}`)
@@ -293,14 +335,24 @@ export function apply(ctx: Context, config: Config) {
   ctx.effect(() => {
     return () => {
       console.log(`[memory-auto] dispose batch ${sessionDirs.size} sessions`)
-      // fire-and-forget digest for each remaining session
+      // fire-and-forget digest for each remaining session (handled: no unhandled rejections)
       for (const [sid, dir] of sessionDirs) {
         const st = states.get(sid)
         if (!st?.hasActivity) continue
-        projectFor(dir).then((proj) => {
-          const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
-          void digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
-        })
+        void (async () => {
+          try {
+            const proj = await projectFor(dir)
+            if (!proj) {
+              console.warn(blockedReason(sid, 'dispose digest'))
+              return
+            }
+            st.project = proj
+            const fakeEvents = [{ type: 'user/message', data: { text: summary(sid) } }]
+            await digestSessionDSM(ctx, digestConfig, sid, dir, proj, fakeEvents)
+          } catch (err) {
+            console.warn(`[memory-auto] dispose digest failed for ${sid}:`, err instanceof Error ? err.message : err)
+          }
+        })()
       }
     }
   })
