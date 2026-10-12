@@ -152,10 +152,25 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
                 "SELECT dedup_key FROM entries WHERE id = ?", (row_id,)
             ).fetchone()
             if clash:
-                errors.append(
-                    f"id clash: {project}/{relpath} wants id {row_id!r} held by"
-                    f" {clash['dedup_key']!r}: refusing to overwrite"
+                # Body edited: the content-derived dedup key changed and the
+                # lookup above missed. Refresh the path-id row in place —
+                # refusing would leave the index stale forever.
+                store.db.execute(
+                    "UPDATE entries SET content = ?, tags = ?, confidence = ?,"
+                    " dedup_key = ?, openspec_change_id = ?, updated_at = ?"
+                    " WHERE id = ?",
+                    (
+                        e["content"],
+                        _json_dumps(canon),
+                        float(e["confidence"] or 1.0),
+                        dedup_key,
+                        e["openspec_change_id"],
+                        e["updated_at"],
+                        row_id,
+                    ),
                 )
+                store.db.commit()
+                n_updated += 1
                 continue
             store._insert_row(
                 row_id,
@@ -173,7 +188,8 @@ def rebuild(memory_path: Path) -> tuple[int, int, list[str]]:
         except Exception as exc:  # noqa: BLE001 — one bad file must not stop the rebuild
             errors.append(f"failed: {project}/{relpath}: {exc}")
     if vocab_new:
-        _store_mod.save_vocabulary(memory_path, vocab)
+        with _store_mod.vault_write_lock(memory_path):
+            _store_mod.save_vocabulary(memory_path, vocab)
     return n_inserted, n_updated, errors
 
 

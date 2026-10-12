@@ -358,6 +358,15 @@ describe('resolveProjectKey', () => {
     expect(verifyProjectKey(vault, 'org/repo')).toBe(true)
   })
 
+  it('rejects keys that escape the vault projects dir', () => {
+    const vault = vaultWith('org/repo')
+    expect(verifyProjectKey(vault, '../../etc')).toBe(false)
+    expect(verifyProjectKey(vault, 'org/../../etc')).toBe(false)
+    expect(verifyProjectKey(vault, '/etc')).toBe(false)
+    expect(verifyProjectKey(vault, '..')).toBe(false)
+    expect(verifyProjectKey(vault, 'org/repo')).toBe(true)
+  })
+
   it('flags an unknown project instead of silently creating it', async () => {
     const vault = vaultWith('real-proj')
     const work = fixture()

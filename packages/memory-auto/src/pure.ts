@@ -96,9 +96,14 @@ export function defaultVaultPath(): string {
 
 /** True when `key` (nested `org/repo` supported) exists under the vault. */
 export function verifyProjectKey(vaultPath: string, key: string): boolean {
-  if (!key.trim()) return false;
+  const trimmed = key.trim();
+  if (!trimmed) return false;
+  // Containment: reject traversal (`..`) and absolute segments before join,
+  // so a declared key can never point outside `<vault>/projects`.
+  if (trimmed.split(/[\\/]/).includes("..")) return false;
+  if (trimmed.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(trimmed)) return false;
   try {
-    return existsSync(join(vaultPath, "projects", key));
+    return existsSync(join(vaultPath, "projects", trimmed));
   } catch {
     return false;
   }

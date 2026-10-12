@@ -304,6 +304,36 @@ def main() -> int:
             n_ins2, _, errors2 = rebuild_index.rebuild(vault)
             assert not errors2 and n_ins2 == 0, (n_ins2, errors2)
 
+        def t_rebuild_refresh():
+            # Body edit after indexing: the content-derived dedup key changes,
+            # the dedup lookup misses, and the path-derived id still exists.
+            # The rebuild must refresh that row in place (id preserved) —
+            # refusing to overwrite left the index stale forever.
+            import rebuild_index
+            rebuild_index._store_mod = store_mod
+            v1 = "One-off body before the edit walk"
+            v2 = "One-off body after the edit walk"
+            md = store_mod._write_okf_file(
+                memory_path=vault, project="proj", entry_type="decisions",
+                content=v1, description="refresh check", tags=["python"],
+                timestamp="2026-10-12T00:00:00+00:00")
+            n_ins, _, errors = rebuild_index.rebuild(vault)
+            assert not errors and n_ins >= 1, (n_ins, errors)
+            row = s.db.execute(
+                "SELECT id, content FROM entries WHERE content = ?",
+                (v1,)).fetchone()
+            assert row is not None, "rebuild did not index the new file"
+            # Edit the body in place: same file path, new content.
+            md.write_text(md.read_text(encoding="utf-8").replace(v1, v2),
+                          encoding="utf-8")
+            n_ins2, _, errors2 = rebuild_index.rebuild(vault)
+            assert not errors2 and n_ins2 == 0, (n_ins2, errors2)
+            row2 = s.db.execute(
+                "SELECT content FROM entries WHERE id = ?",
+                (row["id"],)).fetchone()
+            assert row2 is not None, "refresh dropped the row"
+            assert row2["content"] == v2, (row2["content"], v2)
+
         def t_server_handlers():
             try:
                 import server
@@ -336,6 +366,7 @@ def main() -> int:
             ("maintenance source", t_maintenance_source),
             ("backup/restore", t_backup_restore),
             ("rebuild preserves", t_rebuild),
+            ("rebuild refresh after body edit", t_rebuild_refresh),
             ("server handlers", t_server_handlers),
         ]:
             check(name, fn)

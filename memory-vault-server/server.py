@@ -78,6 +78,17 @@ def _require(params: dict, key: str) -> str:
     return val
 
 
+def _tags_arg(params: dict) -> list[str] | None:
+    """Validate `tags` as list[str] or None. A bare string would iterate as
+    one-char tags and slip past TAG_RE; reject anything but a list of strings."""
+    tags = params.get("tags")
+    if tags is None:
+        return None
+    if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+        raise ValueError("'tags' must be a list of strings")
+    return tags
+
+
 def _derive_description(content: str) -> str:
     """Derive a one-sentence description from the first non-heading line."""
     return _first_non_heading_line(content) or content[:120]
@@ -89,7 +100,7 @@ def _derive_description(content: str) -> str:
 def handle_search_memory(store: MemoryStore, params: dict) -> str:
     project = params.get("project") or None
     entry_type = params.get("entry_type") or None
-    tags = params.get("tags") or None
+    tags = _tags_arg(params) or None
     query = params.get("query") or None
     exclude_projects = params.get("exclude_projects") or None
     results = store.search_entries(
@@ -123,10 +134,17 @@ def handle_update_memory_tags(store: MemoryStore, params: dict) -> str:
     entry_id = params.get("id") or params.get("entry_id")
     if not entry_id:
         raise ValueError("'id' is required and must not be empty")
-    tags = params.get("tags")
+    tags = _tags_arg(params)
     dry_run = params.get("dry_run", True)
     if isinstance(dry_run, str):
         dry_run = dry_run.strip().lower() not in ("false", "0", "no")
+    if not dry_run and tags is None:
+        # Applying without `tags` would silently wipe every tag. Demand the
+        # explicit list ([] still means "clear all").
+        raise ValueError(
+            "'tags' is required to apply (dry_run=false): "
+            "pass an explicit list ([] clears all tags)"
+        )
     expected_revision = params.get("expected_revision") or None
     return json.dumps(
         store.update_memory_tags(
@@ -145,7 +163,7 @@ def _handle_store_typed(
 ) -> str:
     project = _require(params, "project")
     content = _require(params, "content")
-    tags = params.get("tags") or []
+    tags = _tags_arg(params) or []
     description = params.get("description")
     if not description or not str(description).strip():
         description = _derive_description(content)
@@ -184,7 +202,7 @@ def handle_store_convention(store: MemoryStore, params: dict) -> str:
 def handle_store_profile(store: MemoryStore, params: dict) -> str:
     project = _require(params, "project")
     content = _require(params, "content")
-    tags = params.get("tags") or []
+    tags = _tags_arg(params) or []
     entry = store.upsert_profile(project=project, content=content, tags=tags)
     return json.dumps(entry)
 
@@ -214,7 +232,7 @@ def handle_store_source(store: MemoryStore, params: dict) -> str:
     title = _require(params, "title")
     description = _require(params, "description")
     source_kind = _require(params, "source_kind")
-    tags = params.get("tags") or []
+    tags = _tags_arg(params) or []
     content = params.get("content") or None
     supersedes = params.get("supersedes") or None
     result = store.store_source(
@@ -255,7 +273,10 @@ def _tool_definitions() -> list[Tool]:
                     "exclude_projects": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Drop full (nested) project keys before matching.",
+                        "description": (
+                            "Exact match on full project keys; "
+                            "org/repo does not nest under org."
+                        ),
                     },
                 },
             },
@@ -276,6 +297,10 @@ def _tool_definitions() -> list[Tool]:
                     "exclude_projects": {
                         "type": "array",
                         "items": {"type": "string"},
+                        "description": (
+                            "Exact match on full project keys; "
+                            "org/repo does not nest under org."
+                        ),
                     },
                     "limit": {
                         "type": "integer",
@@ -305,7 +330,14 @@ def _tool_definitions() -> list[Tool]:
                     },
                     "entry_type": {"type": "string", "enum": valid_types},
                     "id": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Required to apply (dry_run=false); "
+                            "[] clears all tags. Omitted on a dry run."
+                        ),
+                    },
                     "dry_run": {"type": "boolean", "default": True},
                     "expected_revision": {"type": "string"},
                 },

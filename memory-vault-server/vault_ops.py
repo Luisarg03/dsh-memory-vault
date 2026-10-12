@@ -221,6 +221,7 @@ def cmd_restore(args) -> int:
             f"refusing to overwrite non-empty --vault {vault}: "
             "restore into a clean directory")
     tree = snapshot / "tree"
+    copied: dict[str, str] = {}
     if tree.is_dir():
         for dirpath, dirnames, filenames in os.walk(tree):
             dirnames.sort()
@@ -231,6 +232,7 @@ def cmd_restore(args) -> int:
                 target = vault / rel
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(Path(dirpath) / name, target)
+                copied[rel.as_posix()] = _sha256(target)
     shutil.copy2(snap_db, vault / DB_FILENAME)
     # Belt and braces: no stale WAL/SHM may survive beside the restored DB.
     for suffix in ("-wal", "-shm"):
@@ -242,11 +244,30 @@ def cmd_restore(args) -> int:
     integrity = sqlite3.connect(str(vault / DB_FILENAME)).execute(
         "PRAGMA integrity_check").fetchall()
     rows = _row_counts(vault / DB_FILENAME)
-    ok = integrity == [("ok",)] and rows == manifest.get("rows")
+    # Every manifest file must be restored and hash-match: a missing key or a
+    # hash mismatch means the snapshot tree is incomplete or corrupt.
+    expected_files: dict = manifest.get("files") or {}
+    files_ok = True
+    for rel, want in sorted(expected_files.items()):
+        if rel not in copied:
+            print(f"restore verification FAILED: missing file {rel}",
+                  file=sys.stderr)
+            files_ok = False
+        elif copied[rel] != want:
+            print(f"restore verification FAILED: hash mismatch for {rel}",
+                  file=sys.stderr)
+            files_ok = False
+    for rel in sorted(set(copied) - set(expected_files)):
+        print(f"restore verification FAILED: unexpected file {rel}",
+              file=sys.stderr)
+        files_ok = False
+    ok = (integrity == [("ok",)] and rows == manifest.get("rows")
+          and bool(expected_files) and files_ok)
     print(json.dumps({
         "restored": str(vault), "rows": rows,
         "rows_match_manifest": rows == manifest.get("rows"),
         "integrity_check": [r[0] for r in integrity],
+        "files": len(copied), "files_ok": files_ok,
     }))
     if not ok:
         print("restore verification FAILED", file=sys.stderr)

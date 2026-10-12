@@ -450,13 +450,16 @@ class MemoryStore:
         dedup_key = self._make_dedup_key(entry_type, project, content)
         now = datetime.now(timezone.utc).isoformat()
         vocab_file = self.storage_path / "tag-vocabulary.json"
-        vocab_backup = (
-            vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
-        )
         created_files: list[Path] = []
         replaced_files: list[tuple[Path, str]] = []
+        committed = False
 
         with vault_write_lock(self.storage_path):
+            # Backup the vocabulary under the lock so a concurrent writer's
+            # newer vocab is never clobbered by our rollback.
+            vocab_backup = (
+                vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
+            )
             try:
                 canonical, new_tags = self._normalize_for_store(tags)
 
@@ -505,6 +508,7 @@ class MemoryStore:
                         ),
                     )
                     self.db.commit()
+                    committed = True
                     row = self.db.execute(
                         "SELECT * FROM entries WHERE dedup_key = ?", (dedup_key,)
                     ).fetchone()
@@ -546,6 +550,7 @@ class MemoryStore:
                         now,
                         now,
                     )
+                    committed = True  # _insert_row commits
                     row = self.db.execute(
                         "SELECT * FROM entries WHERE id = ?", (entry_id,)
                     ).fetchone()
@@ -559,6 +564,10 @@ class MemoryStore:
                     return result
             except BaseException:
                 # Ordinary rollback: DB, new files, replaced files, vocabulary.
+                # Once the DB is committed the files/vocab must NOT be rolled
+                # back — the row would survive while its .md got deleted.
+                if committed:
+                    raise
                 try:
                     self.db.rollback()
                 except Exception:
@@ -668,11 +677,14 @@ class MemoryStore:
         now = datetime.now(timezone.utc).isoformat()
         entry_type = "profile"
         vocab_file = self.storage_path / "tag-vocabulary.json"
-        vocab_backup = (
-            vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
-        )
+        committed = False
 
         with vault_write_lock(self.storage_path):
+            # Backup the vocabulary under the lock so a concurrent writer's
+            # newer vocab is never clobbered by our rollback.
+            vocab_backup = (
+                vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
+            )
             try:
                 canonical, new_tags = self._normalize_for_store(tags)
 
@@ -703,6 +715,7 @@ class MemoryStore:
                         (content, json.dumps(final_tags), now, project, entry_type),
                     )
                     self.db.commit()
+                    committed = True
                     row = self.db.execute(
                         "SELECT * FROM entries WHERE project = ? AND entry_type = ?",
                         (project, entry_type),
@@ -731,6 +744,7 @@ class MemoryStore:
                         ),
                     )
                     self.db.commit()
+                    committed = True
                     row = self.db.execute(
                         "SELECT * FROM entries WHERE id = ?", (entry_id,)
                     ).fetchone()
@@ -743,6 +757,10 @@ class MemoryStore:
                 result["invalid_existing"] = invalid_hist
                 return result
             except BaseException:
+                # Once the DB is committed the vocab must NOT be rolled back —
+                # the row survives and stale vocab would clobber newer writes.
+                if committed:
+                    raise
                 try:
                     self.db.rollback()
                 except Exception:
@@ -788,10 +806,13 @@ class MemoryStore:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         vocab_file = self.storage_path / "tag-vocabulary.json"
-        vocab_backup = (
-            vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
-        )
+        committed = False
         with vault_write_lock(self.storage_path):
+            # Backup the vocabulary under the lock so a concurrent writer's
+            # newer vocab is never clobbered by our rollback.
+            vocab_backup = (
+                vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
+            )
             try:
                 canonical, new_tags = self._normalize_for_store(tags)
 
@@ -865,7 +886,12 @@ class MemoryStore:
                         now,
                         now,
                     )
+                    committed = True  # _insert_row commits
                 except BaseException:
+                    # Once the DB is committed the .md must NOT be deleted —
+                    # the row would survive as an orphan pointing nowhere.
+                    if committed:
+                        raise
                     try:
                         self.db.rollback()
                     except Exception:
@@ -885,6 +911,10 @@ class MemoryStore:
                     "new_tags": new_tags,
                 }
             except BaseException:
+                # Once the DB is committed the vocab must NOT be rolled back —
+                # stale backup would clobber a concurrent writer's newer vocab.
+                if committed:
+                    raise
                 try:
                     if vocab_backup is None:
                         if vocab_file.exists():
@@ -1208,100 +1238,103 @@ class MemoryStore:
         entry_type = str(entry_type).strip()
         entry_id = str(entry_id).strip()
 
-        if entry_type == "profile":
-            if not project or not str(project).strip():
-                raise ValueError("project is required for profile tags")
-            project = str(project).strip()
-            row = self.db.execute(
-                "SELECT * FROM entries WHERE project = ? AND entry_type = 'profile'",
-                (project,),
-            ).fetchone()
-            if row is None:
-                raise RuntimeError(f"profile missing for project {project!r}")
-            if row["id"] != entry_id:
-                raise RuntimeError(
-                    f"profile id mismatch for project {project!r}: "
-                    "refusing to retag"
-                )
-            target = ("profile", dict(row), None)
-        elif entry_type == "source":
-            if project is not None and str(project).strip() != "":
-                raise ValueError(
-                    "sources are global: project must be omitted or empty"
-                )
-            row = self.db.execute(
-                "SELECT * FROM entries WHERE id = ? AND entry_type = 'source'",
-                (entry_id,),
-            ).fetchone()
-            if row is None:
-                raise RuntimeError(f"source {entry_id!r} not found")
-            src_file = self.storage_path / "raw" / f"{entry_id}.md"
-            if not src_file.is_file():
-                raise RuntimeError(
-                    f"source Markdown missing for {entry_id!r}: "
-                    "index row exists but no file matches, refusing to retag"
-                )
-            target = ("source", dict(row), src_file)
-        else:
-            if entry_type not in VALID_TYPES:
-                raise ValueError(f"invalid entry_type: {entry_type!r}")
-            if not project or not str(project).strip():
-                raise ValueError("project is required for memory tags")
-            project = str(project).strip()
-            row = self.db.execute(
-                "SELECT * FROM entries WHERE id = ? AND entry_type = ? "
-                "AND project = ?",
-                (entry_id, entry_type, project),
-            ).fetchone()
-            if row is None:
-                raise RuntimeError(
-                    f"entry {entry_id!r} not found for "
-                    f"{project}/{entry_type}"
-                )
-            rowd = dict(row)
-            target_file = self._resolve_entry_file(
-                project, entry_type, rowd["dedup_key"], rowd["content"]
-            )
-            target = ("memory", rowd, target_file)
-
-        _kind, rowd, file_path = target
-        stored = _tags_list(rowd.get("tags"))
-        file_text = (
-            file_path.read_text(encoding="utf-8") if file_path else None
-        )
-        revision = self._entry_revision(
-            stored, rowd.get("content") or "", rowd.get("updated_at") or "",
-            file_text,
-        )
-
-        if dry_run:
-            # Read-only: resolve aliases, never register, never persist.
-            after, _ = self._normalize_for_query(tags)
-            return {
-                "id": entry_id,
-                "project": project,
-                "entry_type": entry_type,
-                "dry_run": True,
-                "applied": False,
-                "before": stored,
-                "after": after,
-                "revision": revision,
-                "new_tags": [],
-                "invalid_existing": [],
-            }
-
-        if not expected_revision or expected_revision != revision:
-            raise RuntimeError(
-                "stale or missing expected_revision: re-read the entry "
-                "(dry_run) and retry with the current revision"
-            )
-
-        vocab_file = self.storage_path / "tag-vocabulary.json"
-        vocab_backup = (
-            vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
-        )
-        replaced: list[tuple[Path, str]] = []
+        # CAS + writes share one lock with the row/file reads: without it,
+        # two concurrent applies with the same expected_revision both pass.
         with vault_write_lock(self.storage_path):
+            if entry_type == "profile":
+                if not project or not str(project).strip():
+                    raise ValueError("project is required for profile tags")
+                project = str(project).strip()
+                row = self.db.execute(
+                    "SELECT * FROM entries WHERE project = ? AND entry_type = 'profile'",
+                    (project,),
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError(f"profile missing for project {project!r}")
+                if row["id"] != entry_id:
+                    raise RuntimeError(
+                        f"profile id mismatch for project {project!r}: "
+                        "refusing to retag"
+                    )
+                target = ("profile", dict(row), None)
+            elif entry_type == "source":
+                if project is not None and str(project).strip() != "":
+                    raise ValueError(
+                        "sources are global: project must be omitted or empty"
+                    )
+                row = self.db.execute(
+                    "SELECT * FROM entries WHERE id = ? AND entry_type = 'source'",
+                    (entry_id,),
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError(f"source {entry_id!r} not found")
+                src_file = self.storage_path / "raw" / f"{entry_id}.md"
+                if not src_file.is_file():
+                    raise RuntimeError(
+                        f"source Markdown missing for {entry_id!r}: "
+                        "index row exists but no file matches, refusing to retag"
+                    )
+                target = ("source", dict(row), src_file)
+            else:
+                if entry_type not in VALID_TYPES:
+                    raise ValueError(f"invalid entry_type: {entry_type!r}")
+                if not project or not str(project).strip():
+                    raise ValueError("project is required for memory tags")
+                project = str(project).strip()
+                row = self.db.execute(
+                    "SELECT * FROM entries WHERE id = ? AND entry_type = ? "
+                    "AND project = ?",
+                    (entry_id, entry_type, project),
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError(
+                        f"entry {entry_id!r} not found for "
+                        f"{project}/{entry_type}"
+                    )
+                rowd = dict(row)
+                target_file = self._resolve_entry_file(
+                    project, entry_type, rowd["dedup_key"], rowd["content"]
+                )
+                target = ("memory", rowd, target_file)
+
+            _kind, rowd, file_path = target
+            stored = _tags_list(rowd.get("tags"))
+            file_text = (
+                file_path.read_text(encoding="utf-8") if file_path else None
+            )
+            revision = self._entry_revision(
+                stored, rowd.get("content") or "", rowd.get("updated_at") or "",
+                file_text,
+            )
+
+            if dry_run:
+                # Read-only: resolve aliases, never register, never persist.
+                after, _ = self._normalize_for_query(tags)
+                return {
+                    "id": entry_id,
+                    "project": project,
+                    "entry_type": entry_type,
+                    "dry_run": True,
+                    "applied": False,
+                    "before": stored,
+                    "after": after,
+                    "revision": revision,
+                    "new_tags": [],
+                    "invalid_existing": [],
+                }
+
+            if not expected_revision or expected_revision != revision:
+                raise RuntimeError(
+                    "stale or missing expected_revision: re-read the entry "
+                    "(dry_run) and retry with the current revision"
+                )
+
+            vocab_file = self.storage_path / "tag-vocabulary.json"
+            vocab_backup = (
+                vocab_file.read_text(encoding="utf-8") if vocab_file.exists() else None
+            )
+            replaced: list[tuple[Path, str]] = []
+            committed = False
             try:
                 after, new_tags = self._normalize_for_store(tags)
                 now = datetime.now(timezone.utc).isoformat()
@@ -1317,6 +1350,7 @@ class MemoryStore:
                     (json.dumps(after), now, entry_id),
                 )
                 self.db.commit()
+                committed = True
                 new_revision = self._entry_revision(
                     after, rowd.get("content") or "", now,
                     file_path.read_text(encoding="utf-8")
@@ -1336,6 +1370,10 @@ class MemoryStore:
                     "invalid_existing": [],
                 }
             except BaseException:
+                # Once the DB is committed the file/vocab must NOT be rolled
+                # back — the row survives and its .md would lose the new tags.
+                if committed:
+                    raise
                 try:
                     self.db.rollback()
                 except Exception:
