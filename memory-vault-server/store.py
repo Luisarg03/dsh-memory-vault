@@ -258,8 +258,15 @@ def _parse_okf_file(path: Path) -> dict | None:
         except (TypeError, ValueError):
             pass
 
-    body_lines = text.split("---", 2)
-    content = body_lines[2].strip() if len(body_lines) >= 3 else ""
+    # Cut the body at the line that closes the frontmatter — the same rule
+    # _parse_frontmatter/_replace_frontmatter_tags use. Splitting on the bare
+    # "---" substring corrupts the body whenever a frontmatter value contains
+    # one (e.g. `description: range 0.2---0.3`), leaving the entry unresolvable.
+    lines = text.splitlines()
+    end = next(
+        (i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None
+    )
+    content = "\n".join(lines[end + 1:]).strip() if end is not None else ""
     ts = str(fm.get("timestamp", ""))
 
     return {

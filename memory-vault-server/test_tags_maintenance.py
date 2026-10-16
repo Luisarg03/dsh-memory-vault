@@ -334,6 +334,28 @@ def main() -> int:
             assert row2 is not None, "refresh dropped the row"
             assert row2["content"] == v2, (row2["content"], v2)
 
+        def t_dash_in_description():
+            # Regression: a "---" substring inside a frontmatter value used to
+            # split the body there, garbling the parsed content and leaving the
+            # DB row unresolvable (update raised "entry Markdown missing ...
+            # refusing to sync"). The body must be cut at the line that closes
+            # the frontmatter and the entry must stay updatable.
+            r = s.upsert_entry("idea", "proj", "Line one\nsecond",
+                               description="range 0.2---0.3", tags=["python"])
+            assert r.get("created"), r
+            files = [p for p in (vault / "projects" / "proj").rglob("*.md")
+                     if p.name != "index.md"
+                     and "range 0.2---0.3" in p.read_text(encoding="utf-8")]
+            assert len(files) == 1, files
+            parsed = store_mod._parse_okf_file(files[0])
+            assert parsed is not None, "file failed to parse"
+            assert parsed["content"] == "Line one\nsecond", parsed["content"]
+            assert parsed["description"] == "range 0.2---0.3", parsed["description"]
+            # Re-store the same entry: must resolve the file, not refuse to sync.
+            r2 = s.upsert_entry("idea", "proj", "Line one\nsecond",
+                                description="range 0.2---0.3", tags=["python"])
+            assert r2.get("updated"), r2
+
         def t_server_handlers():
             try:
                 import server
@@ -367,6 +389,7 @@ def main() -> int:
             ("backup/restore", t_backup_restore),
             ("rebuild preserves", t_rebuild),
             ("rebuild refresh after body edit", t_rebuild_refresh),
+            ("dash in description round-trip", t_dash_in_description),
             ("server handlers", t_server_handlers),
         ]:
             check(name, fn)
