@@ -44,7 +44,7 @@ validation against a list — so verify before filtering:
 
 | Need | Tool | Note |
 |---|---|---|
-| A topic, a decision, a bug, "what do you know about X" | `search_memory` | `query` is tokenized and **OR**-matched, ranked by relevance — not an exact phrase |
+| A topic, a decision, a bug, "what do you know about X" | `search_memory` | `query` is tokenized and **OR**-matched by default (`match="all"` requires every term); quote a span (`"use sqlite"`) for the exact phrase |
 | Which tags exist for a topic | `list_tags` | thematic `query`, bounded `limit` (default 20, max 50); reuse instead of loading everything |
 | Who the user is, the profile, the stack | `get_profile` | profile entries for one project |
 | Everything about one project | `export_memories` | needs `project`; no limit; for dumps, not lookups |
@@ -57,8 +57,10 @@ Traps that cost real time:
 - `get_profile` with **any other** `entry_type` does not filter: it returns the 10 most
   recent entries of that type.
 - `tags` is **OR** as well: `["ci","release"]` returns entries carrying *either* tag.
-- `search_memory` returns **at most 50** entries. For a whole project, use
-  `export_memories`.
+- Every `search_memory` result carries `tags` as a **list** and a `description`
+  (derived from the content when the entry has none). No `json.loads` needed.
+- `search_memory` returns at most `max_results` entries (default 50, cap 200). For a
+  whole project, use `export_memories`.
 - Sharing a generic tag (`python`, `backend`) is **not** by itself a connection: it only
   counts with topical relevance behind it.
 - Sources are global and opt-in: only `entry_type="source"` **without** `project`

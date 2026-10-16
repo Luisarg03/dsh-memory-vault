@@ -356,6 +356,61 @@ def main() -> int:
                                 description="range 0.2---0.3", tags=["python"])
             assert r2.get("updated"), r2
 
+        def t_match_modes():
+            # match='all' intersects terms; match='any' (default) unions them.
+            ids_any = {r["id"] for r in
+                       s.search_entries(query="python storage", match="any")}
+            ids_all = {r["id"] for r in
+                       s.search_entries(query="python storage", match="all")}
+            assert r2["id"] in ids_any, ids_any      # "Python 3.11 is required"
+            assert r1["id"] in ids_any, ids_any      # "Use sqlite for storage"
+            assert r1["id"] not in ids_all, ids_all  # no "python" there
+            assert r2["id"] not in ids_all, ids_all  # no "storage" there
+            both = {r["id"] for r in
+                    s.search_entries(query="sqlite storage", match="all")}
+            assert both == {r1["id"]}, both          # r1 has both terms
+            try:
+                s.search_entries(query="x", match="some")
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("invalid match accepted")
+
+        def t_phrases():
+            # Quoted spans are exact phrases; bare words stay token matches.
+            phrase = {r["id"] for r in s.search_entries(query='"use sqlite"')}
+            assert r1["id"] in phrase, phrase
+            assert r2["id"] not in phrase, phrase
+            reversed_ = {r["id"] for r in s.search_entries(query='"sqlite use"')}
+            assert r1["id"] not in reversed_, reversed_
+            num = {r["id"] for r in s.search_entries(query='"python 3.11"')}
+            assert r2["id"] in num, num
+            # A query of only quotes degrades to a scan, never a crash.
+            s.search_entries(query='""')
+
+        def t_handler_shape():
+            try:
+                import server as srv
+            except ImportError as exc:
+                print(f"  skip: MCP handler assertions ({exc})")
+                return
+            out = json.loads(srv.handle_search_memory(
+                s, {"query": "sqlite", "max_results": 1}))
+            assert len(out) == 1, out
+            row = out[0]
+            assert isinstance(row["tags"], list), row["tags"]
+            assert all(isinstance(t, str) for t in row["tags"]), row["tags"]
+            assert row.get("description"), row
+            out2 = json.loads(srv.handle_search_memory(
+                s, {"project": "proj", "max_results": 10}))
+            assert out2, out2
+            for r in out2:
+                assert isinstance(r["tags"], list), r["tags"]
+                assert r.get("description"), r
+            out3 = json.loads(srv.handle_search_memory(
+                s, {"query": "python storage", "match": "all"}))
+            assert out3 == [], out3
+
         def t_server_handlers():
             try:
                 import server
@@ -390,6 +445,9 @@ def main() -> int:
             ("rebuild preserves", t_rebuild),
             ("rebuild refresh after body edit", t_rebuild_refresh),
             ("dash in description round-trip", t_dash_in_description),
+            ("match any/all", t_match_modes),
+            ("quoted phrases", t_phrases),
+            ("handler result shape", t_handler_shape),
             ("server handlers", t_server_handlers),
         ]:
             check(name, fn)
