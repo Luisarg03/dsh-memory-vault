@@ -8,10 +8,13 @@ import { pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   PACKAGES,
-  REQUIRED_TARBALL_FILES,
+  REQUIRED_ADAPTER_FILES,
+  REQUIRED_DSH_FILES,
   ROOT,
+  dirForTarballName,
   packageVersions,
   remoteTagIsAnnotated,
+  requiredFilesFor,
   tagProblems,
   tarballProblems,
   versionProblems,
@@ -47,7 +50,8 @@ describe('version lockstep', () => {
 
   it('holds for the real tree', () => {
     const versions = packageVersions()
-    expect(versions.map(([, v]) => v)).toEqual([versions[0][1], versions[0][1]])
+    expect(PACKAGES.length).toBeGreaterThan(1)
+    expect(versions.map(([, v]) => v)).toEqual(versions.map(() => versions[0][1]))
     expect(versions[0][1]).toMatch(/^\d+\.\d+\.\d+$/)
   })
 })
@@ -68,7 +72,12 @@ describe('tag matching', () => {
 })
 
 describe('tarball contents', () => {
-  const good = [...REQUIRED_TARBALL_FILES, ...Array.from({ length: 20 }, (_, i) => `package/vault/templates/t${i}.md`)]
+  const good = [...REQUIRED_DSH_FILES, ...Array.from({ length: 20 }, (_, i) => `package/vault/templates/t${i}.md`)]
+  const adapterDir = PACKAGES.find((d) => requiredFilesFor(d) === REQUIRED_ADAPTER_FILES)
+  const adapterGood = [
+    ...REQUIRED_ADAPTER_FILES,
+    ...Array.from({ length: 10 }, (_, i) => `package/skills/extra${i}/SKILL.md`),
+  ]
 
   it('accepts a well-formed tarball', () => {
     expect(tarballProblems(good)).toEqual([])
@@ -96,7 +105,21 @@ describe('tarball contents', () => {
   })
 
   it('rejects a suspiciously small tarball', () => {
-    expect(tarballProblems(REQUIRED_TARBALL_FILES).some((p) => p.includes('expected >= 20'))).toBe(true)
+    expect(tarballProblems(REQUIRED_DSH_FILES).some((p) => p.includes('expected >= 20'))).toBe(true)
+  })
+
+  it('accepts a well-formed adapter tarball and demands its skills', () => {
+    expect(tarballProblems(adapterGood, adapterDir)).toEqual([])
+    const noSkills = adapterGood.filter((f) => !f.startsWith('package/skills/'))
+    expect(tarballProblems(noSkills, adapterDir).some((p) => p.includes('missing required file'))).toBe(true)
+  })
+
+  it('maps a tarball file name back to its package directory', () => {
+    for (const dir of PACKAGES) {
+      const name = JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8')).name.replace('@', '').replace('/', '-')
+      expect(dirForTarballName(`/tmp/dist-tarballs/${name}-0.3.0.tgz`)).toBe(dir)
+    }
+    expect(dirForTarballName('luisarg-unknown-1.0.0.tgz')).toBeNull()
   })
 })
 
@@ -171,7 +194,8 @@ describe('published entry points', () => {
     for (const dir of PACKAGES) {
       const pkg = readPkg(dir)
       expect(pkg.type, `${dir} must be ESM so the .js output is a module`).toBe('module')
-      const declared = [pkg.main, pkg.exports['.'].default, pkg.exports['.'].types]
+      // types are optional: the adapters ship plain ESM with no build step.
+      const declared = [pkg.main, pkg.exports['.'].default, pkg.exports['.'].types].filter(Boolean)
       for (const rel of declared) {
         expect(rel, `${dir} declares no path`).toBeTruthy()
         expect(existsSync(join(ROOT, dir, rel)), `${dir}: ${rel} is missing after build`).toBe(true)
@@ -187,6 +211,8 @@ describe('published entry points', () => {
   const EXPORT_SURFACE = {
     'packages/memory-mcp': ['Config', 'apply', 'name'],
     'packages/memory-auto': ['Config', 'apply', 'inject', 'name'],
+    'packages/memory-pi': ['default'],
+    'packages/memory-opencode': ['MemoryOpenCode'],
   }
 
   it('built output is importable and exports the plugin surface', async () => {

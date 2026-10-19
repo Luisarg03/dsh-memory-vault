@@ -1,0 +1,9 @@
+{
+  "memory-server": {
+    "command": "uv",
+    "args": ["run", "--directory", "${SERVER_DIR}", "python", "server.py"],
+    "env": {
+      "MEMORY_PATH": "${HOME}/.memories"
+    }
+  }
+}

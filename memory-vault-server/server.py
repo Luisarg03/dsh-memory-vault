@@ -36,6 +36,7 @@ from store import (
     VALID_TYPES,
     MemoryStore,
     _first_non_heading_line,
+    _tags_list,
 )
 
 # Observability log: append-only JSONL. Path is derived from MEMORY_PATH so the
@@ -102,14 +103,25 @@ def handle_search_memory(store: MemoryStore, params: dict) -> str:
     entry_type = params.get("entry_type") or None
     tags = _tags_arg(params) or None
     query = params.get("query") or None
+    match = params.get("match") or "any"
+    max_results = params.get("max_results", 50)
     exclude_projects = params.get("exclude_projects") or None
     results = store.search_entries(
         project=project,
         entry_type=entry_type,
         tags=tags,
         query=query,
+        match=match,
+        max_results=max_results,
         exclude_projects=exclude_projects,
     )
+    # Normalize the wire shape: tags as a real list (never an escaped JSON
+    # string) and a description on every row, derived from the content when
+    # the frontmatter has none. source_url/source_kind stay best-effort.
+    for r in results:
+        r["tags"] = _tags_list(r.get("tags"))
+        if not r.get("description"):
+            r["description"] = _derive_description(r.get("content") or "")
     return json.dumps(results)
 
 
@@ -258,9 +270,11 @@ def _tool_definitions() -> list[Tool]:
             name="search_memory",
             description=(
                 "Search memory entries across projects. Omit project to search all projects. "
-                "The query is tokenized and OR-matched (any term hits), ranked by relevance. "
+                "The query is tokenized and matched by any term by default; pass match='all' "
+                "to require every term, and quote a span to match the exact phrase. "
                 "Tags are OR-matched too: passing ['ci','release'] returns entries with either tag. "
-                "Filters narrow the result set; at most 50 entries are returned. "
+                "Filters narrow the result set; at most max_results entries are returned (default 50). "
+                "Every result carries tags as a list and a description. "
                 "Source entries are excluded unless entry_type='source' with no other filter."
             ),
             inputSchema={
@@ -270,6 +284,21 @@ def _tool_definitions() -> list[Tool]:
                     "entry_type": {"type": "string", "enum": valid_types},
                     "tags": {"type": "array", "items": {"type": "string"}},
                     "query": {"type": "string"},
+                    "match": {
+                        "type": "string",
+                        "enum": ["any", "all"],
+                        "default": "any",
+                        "description": (
+                            "any: any query term may hit (default); "
+                            "all: every query term must hit."
+                        ),
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200,
+                        "default": 50,
+                    },
                     "exclude_projects": {
                         "type": "array",
                         "items": {"type": "string"},

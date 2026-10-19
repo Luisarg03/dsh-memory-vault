@@ -258,8 +258,15 @@ def _parse_okf_file(path: Path) -> dict | None:
         except (TypeError, ValueError):
             pass
 
-    body_lines = text.split("---", 2)
-    content = body_lines[2].strip() if len(body_lines) >= 3 else ""
+    # Cut the body at the line that closes the frontmatter — the same rule
+    # _parse_frontmatter/_replace_frontmatter_tags use. Splitting on the bare
+    # "---" substring corrupts the body whenever a frontmatter value contains
+    # one (e.g. `description: range 0.2---0.3`), leaving the entry unresolvable.
+    lines = text.splitlines()
+    end = next(
+        (i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None
+    )
+    content = "\n".join(lines[end + 1:]).strip() if end is not None else ""
     ts = str(fm.get("timestamp", ""))
 
     return {
@@ -276,6 +283,21 @@ def _parse_okf_file(path: Path) -> dict | None:
         "created_at": ts,
         "updated_at": ts,
     }
+
+
+def _fts_terms(query: str) -> list[str]:
+    """Split a user query into FTS5 query terms.
+
+    Quoted spans become phrase matches (``"a b"``) and are passed through
+    intact; every other bare word is emitted as a quoted literal so FTS5
+    boolean operators never leak through.
+    """
+    terms: list[str] = []
+    for quoted, bare in _re.findall(r'"([^"]*)"|(\S+)', query):
+        token = quoted.strip() if quoted.strip() else bare.replace('"', "")
+        if token:
+            terms.append(f'"{token}"')
+    return terms
 
 
 def _tags_list(raw: str | list | None) -> list[str]:
@@ -1013,6 +1035,7 @@ class MemoryStore:
         entry_type: str | None = None,
         tags: list[str] | None = None,
         query: str | None = None,
+        match: str = "any",
         max_results: int = 50,
         exclude_projects: list[str] | None = None,
         include_profiles: bool = False,
@@ -1024,10 +1047,23 @@ class MemoryStore:
         Sources and profiles are excluded (profiles live behind
         ``get_profile``/``export_memories``). ``exclude_projects`` drops full
         nested project keys in SQL before rows/LIMIT and before Markdown
-        bodies are read. Query tokens match with OR semantics (quoted FTS5
-        literals); tag filters are OR over canonical tags. FTS queries rank by
-        bm25 ascending with updated_at tiebreak; scans sort updated_at desc.
+        bodies are read. Query terms match with OR semantics by default and
+        with AND when ``match='all'``; a quoted span matches the exact phrase
+        either way. Tag filters are OR over canonical tags. FTS queries rank
+        by bm25 ascending with updated_at tiebreak; scans sort updated_at
+        desc. ``max_results`` is a positive int (the MCP tool caps it at 200;
+        exports pass a large one).
         """
+        if match not in ("any", "all"):
+            raise ValueError(f"match must be 'any' or 'all', got {match!r}")
+        if (
+            not isinstance(max_results, int)
+            or isinstance(max_results, bool)
+            or max_results < 1
+        ):
+            raise ValueError(
+                f"max_results must be a positive int, got {max_results!r}"
+            )
         excludes = list(exclude_projects or [])
         if entry_type == "source" and project:
             raise ValueError(
@@ -1035,53 +1071,45 @@ class MemoryStore:
                 "sources are global"
             )
         canon_tags, _ = self._normalize_for_query(tags) if tags else ([], [])
-        tokens = (query or "").replace('"', "").split()
+        terms = _fts_terms(query) if query else []
 
-        if tokens:
-            # FTS5 treats bare words as boolean operators; quote each token
-            # and join with OR for literal token-OR matching.
-            fts_query = " OR ".join(f'"{t}"' for t in tokens)
-            fts_sql = (
-                "SELECT rowid, bm25(entries_fts, 1.0, 3.0) AS score "
-                "FROM entries_fts WHERE entries_fts MATCH ?"
+        if terms:
+            # FTS5 treats bare words as boolean operators; terms arrive as
+            # quoted literals/phrases joined with OR (default) or AND.
+            joiner = " AND " if match == "all" else " OR "
+            fts_query = joiner.join(terms)
+            # Single round trip: bm25 ranks in the same query that fetches
+            # the rows (bm25() is negative: more negative = more relevant).
+            sql = (
+                "SELECT e.*, bm25(entries_fts, 1.0, 3.0) AS score "
+                "FROM entries_fts "
+                "JOIN entries e ON e.rowid = entries_fts.rowid "
+                "WHERE entries_fts MATCH ?"
             )
-            fts_rows = self.db.execute(fts_sql, (fts_query,)).fetchall()
-            rowids = [r[0] for r in fts_rows]
-            if not rowids:
-                return []
-            placeholders = ",".join("?" * len(rowids))
-            base_sql = (
-                "SELECT e.*, f.score FROM entries e "
-                f"JOIN ({fts_sql}) f ON f.rowid = e.rowid "
-                f"WHERE e.rowid IN ({placeholders})"
-            )
-            params: list = [fts_query, *rowids]
+            params: list = [fts_query]
             if entry_type:
-                base_sql += " AND e.entry_type = ?"
+                sql += " AND e.entry_type = ?"
                 params.append(entry_type)
             elif include_profiles:
-                base_sql += " AND e.entry_type != 'source'"
+                sql += " AND e.entry_type != 'source'"
             else:
-                base_sql += " AND e.entry_type NOT IN ('source', 'profile')"
+                sql += " AND e.entry_type NOT IN ('source', 'profile')"
             if project:
-                base_sql += " AND e.project = ?"
+                sql += " AND e.project = ?"
                 params.append(project)
             excl_sql, excl_params = self._exclusion_clause(excludes)
-            base_sql += excl_sql
+            sql += excl_sql
             params.extend(excl_params)
             if canon_tags:
                 tag_ph = ",".join("?" * len(canon_tags))
-                base_sql += (
+                sql += (
                     " AND EXISTS (SELECT 1 FROM json_each(e.tags) "
                     f"WHERE json_each.value IN ({tag_ph}))"
                 )
                 params.extend(canon_tags)
-            # bm25() returns negative scores: more negative = more relevant,
-            # so rank ascending; updated_at breaks ties.
-            base_sql += " ORDER BY f.score ASC, e.updated_at DESC LIMIT ?"
+            sql += " ORDER BY score ASC, e.updated_at DESC LIMIT ?"
             params.append(max_results)
-            rows = self.db.execute(base_sql, params).fetchall()
-            results = [dict(r) for r in rows]
+            results = [dict(r) for r in self.db.execute(sql, params).fetchall()]
             for r in results:
                 r["score"] = round(r["score"], 3)
             return results

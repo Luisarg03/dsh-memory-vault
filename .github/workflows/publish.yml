@@ -1,14 +1,16 @@
-# Publishes both packages to npm when a release tag is pushed.
+# Publishes the packages to npm when a release tag is pushed.
 #
 # Auth is npm Trusted Publishing (OIDC): no NPM_TOKEN anywhere. npm verifies the
 # GitHub OIDC token against the Trusted Publisher registered on the package
 # (this repo + this workflow file + the `release` environment), then attaches a
 # provenance attestation automatically for public packages.
 #
-# One-time setup on npmjs.com, for BOTH @luisarg/memory-mcp and
-# @luisarg/memory-auto: Settings -> Trusted Publisher -> GitHub Actions with
-# repository Luisarg03/dsh-memory-vault, workflow `publish.yml`, environment
-# `release`, allowed action `npm publish`. See docs/releasing.md.
+# One-time setup on npmjs.com, for EACH published package: @luisarg/memory-mcp,
+# @luisarg/memory-auto (the DSH plugins), @luisarg/memory-pi and
+# @luisarg/memory-opencode (the host adapters) — Settings -> Trusted Publisher ->
+# GitHub Actions with repository Luisarg03/dsh-memory-vault, workflow
+# `publish.yml`, environment `release`, allowed action `npm publish`.
+# See docs/releasing.md.
 name: publish
 
 on:
@@ -148,12 +150,13 @@ jobs:
       - name: Pack
         run: |
           mkdir -p dist-tarballs
-          pnpm --filter @luisarg/memory-mcp pack --pack-destination dist-tarballs
-          pnpm --filter @luisarg/memory-auto pack --pack-destination dist-tarballs
+          for pkg in memory-mcp memory-auto memory-pi memory-opencode; do
+            pnpm --filter "@luisarg/$pkg" pack --pack-destination dist-tarballs
+          done
           # Fail here rather than at publish time if pnpm ever ignores the
           # destination: an empty publish step is hard to read in the log.
           ls -l dist-tarballs
-          test "$(ls dist-tarballs/*.tgz | wc -l)" -eq 2
+          test "$(ls dist-tarballs/*.tgz | wc -l)" -eq 4
 
       # The tarball is the artifact users install: no vault data, no .venv,
       # no __pycache__, and the bundled server must actually be in there.
@@ -184,7 +187,7 @@ jobs:
           echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
           echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
           echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
-          for dir in packages/memory-mcp packages/memory-auto; do
+          for dir in packages/memory-mcp packages/memory-auto packages/memory-pi packages/memory-opencode; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
 
@@ -217,7 +220,7 @@ jobs:
           expected="$(git rev-list -n1 "$TAG")"
           attempts=20
           delay=15
-          for dir in packages/memory-mcp packages/memory-auto; do
+          for dir in packages/memory-mcp packages/memory-auto packages/memory-pi packages/memory-opencode; do
             name="$(node -p "require('./$dir/package.json').name")"
             version="$(node -p "require('./$dir/package.json').version")"
             head=""
@@ -248,5 +251,5 @@ jobs:
           fi
           gh release create "$TAG" \
             --title "$TAG" \
-            --notes "Published \`@luisarg/memory-mcp\` and \`@luisarg/memory-auto\` to npm with provenance. Versions and commit mapping: docs/releasing.md." \
+            --notes "Published \`@luisarg/memory-mcp\`, \`@luisarg/memory-auto\`, \`@luisarg/memory-pi\` and \`@luisarg/memory-opencode\` to npm with provenance. Versions and commit mapping: docs/releasing.md." \
             --verify-tag

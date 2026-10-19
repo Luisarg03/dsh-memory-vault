@@ -162,7 +162,7 @@ describe('skill contract: tags and cross-project behavior', () => {
 
   it('brain documents the 50-cap, zero case, generic-tag and source rules', async () => {
     const content = await body('brain')
-    expect(content).toContain('at most 50')
+    expect(content).toContain('at most `max_results` entries (default 50, cap 200)')
     expect(content).toContain('Zero when nothing earns it')
     expect(content).toContain('not** by itself a connection')
     expect(content).toContain('without** `project`')
