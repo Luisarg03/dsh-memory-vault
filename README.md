@@ -86,6 +86,8 @@ runs before an artifact ships is in [`docs/releasing.md`](docs/releasing.md).
 |---|---|---|
 | `memory-mcp` | MCP stdio client: spawns the vault server, exposes its tools and the `brain` / `checkpoint` skills | `@luisarg/memory-mcp` |
 | `memory-auto` | Session hooks + in-process digest, and the `checkpoint-auto` skill | `@luisarg/memory-auto` |
+| `memory-pi` | PI adapter: registers the `memory-server` MCP entry + skills (`pi install npm:@luisarg/memory-pi`) | `@luisarg/memory-pi` |
+| `memory-opencode` | opencode adapter: plugin registers the MCP entry + skills (`opencode plugin -g`) | `@luisarg/memory-opencode` |
 | `memory-vault-server/` | Python MCP server: SQLite FTS5 + Markdown OKF | — |
 | `memory-vault/` | Vault starter: templates + type registry + tag vocabulary | — |
 | `scripts/digest_session.py` | Optional standalone digest CLI (not used by the plugins) | — |
@@ -190,28 +192,35 @@ pnpm dsh web --port 3090
   subpackages of this monorepo cannot be installed with `github:...` at all — use npm or a
   tarball.
 
-## Second MCP client: opencode
+## Other MCP clients: opencode and PI
 
 The vault is a plain stdio MCP server, so any MCP client can use the same server and the same
-vault (see [`docs/central-zone.md`](docs/central-zone.md) for the shared-vault layout). For
-opencode, `~/.config/opencode/opencode.json`:
+vault (see [`docs/central-zone.md`](docs/central-zone.md) for the shared-vault layout). Instead of
+hand-writing the client config, install the adapter package for your client — it registers the
+`memory-server` MCP entry and the skills itself:
 
-```json
-"mcp": {
-  "memory-server": {
-    "type": "local",
-    "command": ["uv", "run", "--directory", "<repo>/memory-vault-server", "python", "server.py"],
-    "enabled": true,
-    "environment": { "MEMORY_PATH": "<absolute path to your vault>" }
-  }
-}
+```sh
+opencode plugin -g @luisarg/memory-opencode   # opencode: mcp `memory-server` + skills
+pi install npm:@luisarg/memory-pi             # PI: mcp.json entry (via extension) + skills
 ```
 
-> The key must be **`environment`** — `env` is silently ignored and the server falls back to the
-> default vault. The plugin skills are a DSH feature and do **not** travel over MCP: an opencode
-> user who wants the same commands copies the `SKILL.md` files into a directory opencode reads
-> (`~/.config/opencode/skills/<name>/SKILL.md`), renaming the tool prefix from `mcp__memory__*`
-> to `memory-server_*`.
+Both adapters read the canonical server spec bundled at `<pkg>/server/mcp-servers.json` — one
+flat `memory-server` entry — and translate it to their client's dialect: opencode needs the
+`environment` key and a shell-free argv array, PI takes `command` + `args` + `env`. Tool names
+follow each client's convention (`memory-server_*` in opencode, `mcp__memory-server__*` in PI).
+`uv` must be on PATH for the adapters (same as the manual config below).
+
+An existing config wins in both clients: opencode keeps a `memory-server` you declared yourself,
+and a homonymous server in PI's `mcp.json` takes precedence over the extension-registered one.
+For a custom vault, declare your own entry with `MEMORY_PATH` — the shared default is
+`~/.memories`.
+
+> Prefer to configure by hand? The manual shapes still work: in opencode the key must be
+> **`environment`** (`env` is silently ignored and the server falls back to the default vault),
+> and the plugin skills are a DSH feature that does **not** travel over MCP — copy the
+> `SKILL.md` files into a directory the client reads and rename the tool prefix
+> (`mcp__memory__*` → `memory-server_*` in opencode, → `mcp__memory-server__*` in PI). The
+> adapter packages do both for you.
 
 ## Development
 
@@ -226,6 +235,8 @@ dsh web --patch ./examples/dev-memory.cordis.yml
 ```
 packages/memory-mcp/          # cordis bundle: MCP stdio client (+ brain, checkpoint skills)
 packages/memory-auto/         # cordis bundle: automatic session digest (+ checkpoint-auto skill)
+packages/memory-pi/           # PI adapter package (extension + skills + bundled server)
+packages/memory-opencode/     # opencode adapter package (plugin + skills + bundled server)
 memory-vault-server/          # Python MCP server (SQLite + Markdown OKF)
 memory-vault/                 # vault starter (templates + type registry)
 scripts/digest_session.py     # optional standalone digest CLI (not used by the plugins)
@@ -233,9 +244,10 @@ examples/dev-memory.cordis.yml       # memory-mcp
 examples/dev-memory-auto.cordis.yml  # memory-mcp + memory-auto
 ```
 
-`pnpm -r build` runs each package's build; `pnpm bundle` copies the server and the vault starter
-into the packages, so a release tarball is self-contained. CI runs lint, build and the test
-suites on every push (`pnpm lint && pnpm -r build && pnpm -r test`).
+`pnpm -r build` runs each package's build; `pnpm bundle` copies the server, the vault starter and
+the skills (with the tool prefix rewritten per adapter) into the packages, so a release tarball is
+self-contained. CI runs lint, build and the test suites on every push
+(`pnpm lint && pnpm -r build && pnpm -r test`).
 
 ## Docs
 

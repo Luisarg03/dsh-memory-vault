@@ -8,7 +8,15 @@ import { fileURLToPath } from 'node:url'
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
 /** The packages published to npm. Kept in lockstep: same version, one tag. */
-export const PACKAGES = ['packages/memory-mcp', 'packages/memory-auto']
+export const PACKAGES = [
+  'packages/memory-mcp',
+  'packages/memory-auto',
+  'packages/memory-pi',
+  'packages/memory-opencode',
+]
+
+/** The DSH packages ship a build (dist/) plus the vault starter. */
+const DSH_PACKAGES = new Set(['packages/memory-mcp', 'packages/memory-auto'])
 
 /** Matches the tag scheme used by the repo: v<semver>. */
 export const TAG_RE = /^v(\d+\.\d+\.\d+)$/
@@ -41,17 +49,51 @@ export function versionProblems(files) {
   return problems
 }
 
-/** Paths every published tarball must contain (bundled server + vault starter). */
+/** Files every published tarball must contain (the bundled vault server). */
 export const REQUIRED_TARBALL_FILES = [
   'package/package.json',
-  'package/cordis.patch.yml',
-  'package/dist/index.js',
   'package/server/server.py',
   'package/server/store.py',
-  'package/server/launcher.mjs',
   'package/server/requirements.txt',
+  'package/server/mcp-servers.json',
+]
+
+/** Plus: a DSH package's build output, patch and vault starter. */
+export const REQUIRED_DSH_FILES = [
+  ...REQUIRED_TARBALL_FILES,
+  'package/cordis.patch.yml',
+  'package/dist/index.js',
+  'package/server/launcher.mjs',
   'package/vault/type-registry.yaml',
 ]
+
+/** Plus: an adapter's skills (bundled with the tool prefix rewritten). */
+export const REQUIRED_ADAPTER_FILES = [
+  ...REQUIRED_TARBALL_FILES,
+  'package/skills/brain/SKILL.md',
+  'package/skills/checkpoint/SKILL.md',
+  'package/skills/checkpoint-auto/SKILL.md',
+]
+
+/** The required file list for one package directory. */
+export function requiredFilesFor(dir) {
+  return DSH_PACKAGES.has(dir) ? REQUIRED_DSH_FILES : REQUIRED_ADAPTER_FILES
+}
+
+/**
+ * Maps a packed tarball's file name (`luisarg-memory-pi-0.3.0.tgz`) to the
+ * package directory that produced it, or null when the name matches nothing.
+ * npm joins the scope with a hyphen: `@luisarg/memory-pi` → `luisarg-memory-pi`.
+ */
+export function dirForTarballName(fileName) {
+  const base = fileName.replace(/^.*\//, '').replace(/\.tgz$/, '')
+  const name = base.replace(/-\d+\.\d+\.\d+$/, '')
+  for (const dir of PACKAGES) {
+    const pkg = JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8'))
+    if (pkg.name.replace('@', '').replace('/', '-') === name) return dir
+  }
+  return null
+}
 
 // Anything that must never ship. `node_modules` and `.venv` are matched as path
 // segments so a file like `dist/node_modules.js` is not a false positive; the
@@ -69,18 +111,20 @@ const FORBIDDEN = [
 ]
 
 /** Problems with the file list of a packed tarball; empty means publishable. */
-export function tarballProblems(files) {
+export function tarballProblems(files, dir = 'packages/memory-mcp') {
   const problems = []
   const set = new Set(files)
-  for (const required of REQUIRED_TARBALL_FILES) {
+  for (const required of requiredFilesFor(dir)) {
     if (!set.has(required)) problems.push(`missing required file: ${required}`)
   }
   for (const file of files) {
     if (FORBIDDEN.some((re) => re.test(file))) problems.push(`forbidden path in tarball: ${file}`)
   }
   // A tarball far below this means the bundling step silently no-op'd; 0.1.0
-  // shipped 7 files that way and nothing caught it.
-  if (files.length < 20) problems.push(`only ${files.length} files (expected >= 20)`)
+  // shipped 7 files that way and nothing caught it. Adapters carry no dist/ or
+  // vault starter, so their floor is lower.
+  const min = DSH_PACKAGES.has(dir) ? 20 : 12
+  if (files.length < min) problems.push(`only ${files.length} files (expected >= ${min})`)
   return problems
 }
 

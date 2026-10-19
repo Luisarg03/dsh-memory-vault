@@ -26,17 +26,24 @@ de ahí).
 | Cliente | Config | Spawn |
 |---|---|---|
 | DSH profile `web` | bundle default: vault `~/.memories`, server `$DSH_HOME/memory-vault-server` (override con `DSH_MEMORY_PATH` / `DSH_MEMORY_SERVER_DIR`, o `~/.dsh/profiles/web/cordis.patch.yml`) | `uv run --directory dsh-memory-vault/memory-vault-server python server.py` |
-| opencode (global) | `~/.config/opencode/opencode.json` → `mcp.memory-server` | mismo comando, `"environment": {"MEMORY_PATH": "~/.memories"}` |
+| opencode | `opencode plugin -g @luisarg/memory-opencode` (adaptador que registra `mcp.memory-server` + skills) | mismo comando, `MEMORY_PATH` default `~/.memories` |
+| PI | `pi install npm:@luisarg/memory-pi` (adaptador: extension registra `memory-server` + skills) | mismo comando, `MEMORY_PATH` default `~/.memories` |
+
+Los adaptadores leen el spec canónico `memory-vault-server/mcp-servers.json` (una entrada plana
+`memory-server`, viaja bundlado como `<pkg>/server/mcp-servers.json`) y lo traducen al dialecto de
+cada cliente. Un `memory-server` declarado a mano por el usuario siempre gana (en opencode no se
+pisa; en PI el homónimo de `mcp.json` tiene prioridad sobre la extensión).
 
 > El default del bundle es `~/.memories` (no `$DSH_HOME/memory-vault`, que era la
 > regresión de 0.1.5): un perfil sin patch ya escribe en la zona central. Un patch
 > vacío (`[]`) no pinea nada, así que el default es lo que manda.
 
-> Pitfall: opencode usa la key **`environment`**, no `env` — `env` se ignora
-> silenciosamente y el server cae al vault default (escribe fuera de la zona).
+> Pitfall (config manual): opencode usa la key **`environment`**, no `env` — `env` se ignora
+> silenciosamente y el server cae al vault default (escribe fuera de la zona). El adaptador
+> `@luisarg/memory-opencode` escribe la key correcta.
 
-Rutas absolutas en esos 2 archivos: si el repo del server se mueve,
-actualizar ambos.
+Rutas absolutas en la config manual: si el repo del server se mueve, actualizarla. Los
+adaptadores npm no dependen de rutas de máquina (el server va dentro del paquete).
 
 ## Unión / rebuild (procedimiento del 2026-09-09)
 
@@ -69,7 +76,9 @@ indexan — el server tampoco los escribiría.
 ## Tercer cliente
 
 Cualquier cliente MCP que spawnée el server con `MEMORY_PATH=~/.memories`
-comparte la zona. Concurrencia: SQLite WAL y `timeout=30` explícito en las
+comparte la zona; para los dos soportados hay paquete npm (`@luisarg/memory-pi`,
+`@luisarg/memory-opencode`) y para cualquier otro alcanza con copiar la entrada
+del spec canónico. Concurrencia: SQLite WAL y `timeout=30` explícito en las
 conexiones de `store.py` (antes 5 s default) — writes pequeños single-user OK.
 El timeout aplica también al `PRAGMA integrity_check` del arranque: con el
 default, un lock de otro cliente se reportaba como `corrupt database`.

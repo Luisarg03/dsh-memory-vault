@@ -12,9 +12,10 @@ git push origin v0.1.3
 ```
 
 There is no tag per package: `@luisarg/memory-mcp` and `@luisarg/memory-auto`
-are versioned in lockstep and published together, so a single tag identifies
-both artifacts of that release. If the packages ever diverge, switch to the
-`<package>@<version>` scheme (the Changesets convention) and keep `v*` for the
+(the DSH plugins), `@luisarg/memory-pi` and `@luisarg/memory-opencode` (the host
+adapters) are versioned in lockstep and published together, so a single tag
+identifies all artifacts of that release. If the packages ever diverge, switch to
+the `<package>@<version>` scheme (the Changesets convention) and keep `v*` for the
 already-published releases listed below.
 
 ### The one rule that matters
@@ -37,11 +38,11 @@ landed after the publish commit (see the 0.1.1 note below).
 
 Releases are published by CI, not from a laptop. Pushing an annotated tag
 `v<version>` to `main` triggers `.github/workflows/publish.yml`, which builds,
-tests, validates the tarballs and publishes both packages to npm with a
+tests, validates the tarballs and publishes all four packages to npm with a
 provenance attestation.
 
 ```sh
-# 1. bump both package.json files in lockstep
+# 1. bump every package.json in lockstep (all four packages)
 pnpm release:bump 0.1.7
 pnpm -r build && pnpm -r test && pnpm release:check
 
@@ -54,10 +55,12 @@ git tag -a v0.1.7 -m "Release 0.1.7" && git push origin v0.1.7
 Then the workflow takes over:
 
 1. fails fast if npm < 11.5.1 (Trusted Publishing requirement);
-2. `release-check.mjs --tag v0.1.7 --strict` — tag, both package versions and
+2. `release-check.mjs --tag v0.1.7 --strict` — tag, all package versions and
    HEAD must agree, and the tree must be clean;
-3. packs both packages and validates every tarball (`check-tarball.mjs`):
-   required bundled files present, no vault data, no build residue;
+3. packs every package and validates every tarball (`check-tarball.mjs`):
+   required bundled files present (per package: DSH plugins ship the dist build
+   and vault starter, adapters ship the rewritten skills), no vault data, no
+   build residue;
 4. `npm publish <tarball> --access public` per package, authenticated by OIDC.
    A version already on npm is skipped, so a re-run resumes instead of failing;
 5. verifies the published `gitHead` equals the tag's commit;
@@ -68,9 +71,12 @@ If you must publish by hand (npm outage, hotfix), the equivalent manual path is
 and only then tag — the tag must point at the commit whose `package.json`
 versions actually reached npm.
 
-### One-time npm setup (already done for 0.1.x — a new package needs it)
+### One-time npm setup (done for the DSH plugins — the adapters need it)
 
-Per package on npmjs.com → Settings:
+Per package on npmjs.com → Settings: `@luisarg/memory-pi` and
+`@luisarg/memory-opencode` have never been published, so each one needs its
+Trusted Publisher entry **before** the first release (OIDC cannot create a
+package that does not exist).
 
 | Setting | Value |
 |---|---|
@@ -85,8 +91,9 @@ Per package on npmjs.com → Settings:
 The same setup is scriptable — one call per package (`npm` ≥ 11.5):
 
 ```sh
-npm trust github @luisarg/memory-mcp \
-  --file publish.yml --repo Luisarg03/dsh-memory-vault --env release --allow-publish -y
+for pkg in @luisarg/memory-mcp @luisarg/memory-auto @luisarg/memory-pi @luisarg/memory-opencode; do
+  npm trust github "$pkg" --file publish.yml --repo Luisarg03/dsh-memory-vault --env release --allow-publish -y
+done
 ```
 
 Validate the parameters first with `--dry-run`, which does not prompt. The real

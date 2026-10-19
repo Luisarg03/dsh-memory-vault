@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import process from 'node:process'
-import { tarballProblems } from './release-lib.mjs'
+import { dirForTarballName, tarballProblems } from './release-lib.mjs'
 
 const tarballs = process.argv.slice(2)
 if (tarballs.length === 0) {
@@ -29,7 +29,10 @@ for (const path of tarballs) {
   }
   const listing = execFileSync('tar', ['-tzf', resolve(path)], { encoding: 'utf8' })
   const files = listing.split('\n').filter((line) => line && !line.endsWith('/'))
-  const problems = tarballProblems(files)
+  // Each tarball is checked against its own package's required file list: the
+  // DSH packages ship dist/ + vault starter, the adapters ship skills/.
+  const dir = dirForTarballName(path)
+  const problems = dir ? tarballProblems(files, dir) : [`unrecognized tarball name: ${path}`]
   const size = (statSync(path).size / 1024).toFixed(1)
 
   if (problems.length) {
