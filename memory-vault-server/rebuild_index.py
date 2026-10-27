@@ -189,6 +189,7 @@ def regen_missing_indexes(memory_path: Path, store) -> int:
     n = 0
 
     def scan(prefix: Path):
+        nonlocal n
         for d in sorted(child for child in prefix.iterdir() if child.is_dir()):
             if d.name in _store_mod._DIR_TO_SINGULAR or d.name == ".obsidian":
                 continue  # type dir or editor cache — not a project
