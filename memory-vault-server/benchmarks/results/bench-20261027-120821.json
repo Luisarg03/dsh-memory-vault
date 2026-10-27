@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "timestamp": "2026-10-27T15:08:18.633495+00:00",
+    "python": "3.12.13",
+    "vault_source": "/home/hiro03/.memories",
+    "vault_mode": "copy",
+    "project": "ArchCustomWidgets",
+    "iterations": 6,
+    "heavy_iterations": 3,
+    "md_files": 3864,
+    "db_bytes": 5525504
+  },
+  "warm": {
+    "fts_short_or": {
+      "n": 6,
+      "p50_ms": 0.249,
+      "p95_ms": 0.272,
+      "max_ms": 0.272,
+      "mean_ms": 0.252,
+      "result_count": 50
+    },
+    "fts_words_and": {
+      "n": 6,
+      "p50_ms": 0.08,
+      "p95_ms": 0.082,
+      "max_ms": 0.082,
+      "mean_ms": 0.079,
+      "result_count": 7
+    },
+    "fts_phrase": {
+      "n": 6,
+      "p50_ms": 0.202,
+      "p95_ms": 0.24,
+      "max_ms": 0.24,
+      "mean_ms": 0.211,
+      "result_count": 39
+    },
+    "fts_project": {
+      "n": 6,
+      "p50_ms": 0.041,
+      "p95_ms": 0.046,
+      "max_ms": 0.046,
+      "mean_ms": 0.042,
+      "result_count": 1
+    },
+    "get_profile": {
+      "n": 6,
+      "p50_ms": 0.012,
+      "p95_ms": 0.013,
+      "max_ms": 0.013,
+      "mean_ms": 0.013,
+      "result_count": 1
+    },
+    "normalize_query_tags": {
+      "n": 6,
+      "p50_ms": 0.446,
+      "p95_ms": 0.563,
+      "max_ms": 0.563,
+      "mean_ms": 0.468,
+      "result_count": 2
+    },
+    "scan_project_nq": {
+      "n": 3,
+      "p50_ms": 103.701,
+      "p95_ms": 107.048,
+      "max_ms": 107.048,
+      "mean_ms": 104.584,
+      "result_count": 50
+    },
+    "scan_all_nq": {
+      "n": 3,
+      "p50_ms": 165.345,
+      "p95_ms": 167.04,
+      "max_ms": 167.04,
+      "mean_ms": 165.774,
+      "result_count": 50
+    },
+    "export_project": {
+      "n": 3,
+      "p50_ms": 105.187,
+      "p95_ms": 107.048,
+      "max_ms": 107.048,
+      "mean_ms": 105.485,
+      "result_count": 626
+    },
+    "list_tags_project": {
+      "n": 3,
+      "p50_ms": 106.714,
+      "p95_ms": 107.927,
+      "max_ms": 107.927,
+      "mean_ms": 106.532,
+      "result_count": 2
+    },
+    "list_tags_all": {
+      "n": 3,
+      "p50_ms": 166.12,
+      "p95_ms": 166.935,
+      "max_ms": 166.935,
+      "mean_ms": 166.351,
+      "result_count": 2
+    }
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "meta": {
+    "timestamp": "2026-10-27T15:08:53.232403+00:00",
+    "python": "3.12.13",
+    "vault_source": "/home/hiro03/.memories",
+    "vault_mode": "copy",
+    "project": "ArchCustomWidgets",
+    "iterations": 30,
+    "heavy_iterations": 5,
+    "md_files": 3864,
+    "db_bytes": 5525504
+  },
+  "warm": {
+    "fts_short_or": {
+      "n": 30,
+      "p50_ms": 0.25,
+      "p95_ms": 0.276,
+      "max_ms": 0.301,
+      "mean_ms": 0.254,
+      "result_count": 50
+    },
+    "fts_words_and": {
+      "n": 30,
+      "p50_ms": 0.069,
+      "p95_ms": 0.089,
+      "max_ms": 0.102,
+      "mean_ms": 0.071,
+      "result_count": 7
+    },
+    "fts_phrase": {
+      "n": 30,
+      "p50_ms": 0.197,
+      "p95_ms": 0.224,
+      "max_ms": 0.246,
+      "mean_ms": 0.201,
+      "result_count": 39
+    },
+    "fts_project": {
+      "n": 30,
+      "p50_ms": 0.039,
+      "p95_ms": 0.048,
+      "max_ms": 0.072,
+      "mean_ms": 0.041,
+      "result_count": 1
+    },
+    "get_profile": {
+      "n": 30,
+      "p50_ms": 0.012,
+      "p95_ms": 0.015,
+      "max_ms": 0.017,
+      "mean_ms": 0.012,
+      "result_count": 1
+    },
+    "normalize_query_tags": {
+      "n": 30,
+      "p50_ms": 0.435,
+      "p95_ms": 0.504,
+      "max_ms": 0.546,
+      "mean_ms": 0.442,
+      "result_count": 2
+    },
+    "scan_project_nq": {
+      "n": 5,
+      "p50_ms": 103.221,
+      "p95_ms": 104.979,
+      "max_ms": 104.979,
+      "mean_ms": 103.305,
+      "result_count": 50
+    },
+    "scan_all_nq": {
+      "n": 5,
+      "p50_ms": 165.038,
+      "p95_ms": 170.011,
+      "max_ms": 170.011,
+      "mean_ms": 166.134,
+      "result_count": 50
+    },
+    "export_project": {
+      "n": 5,
+      "p50_ms": 105.257,
+      "p95_ms": 106.899,
+      "max_ms": 106.899,
+      "mean_ms": 105.738,
+      "result_count": 626
+    },
+    "list_tags_project": {
+      "n": 5,
+      "p50_ms": 103.964,
+      "p95_ms": 108.059,
+      "max_ms": 108.059,
+      "mean_ms": 104.809,
+      "result_count": 2
+    },
+    "list_tags_all": {
+      "n": 5,
+      "p50_ms": 167.266,
+      "p95_ms": 171.239,
+      "max_ms": 171.239,
+      "mean_ms": 167.905,
+      "result_count": 2
+    }
+  },
+  "writes": {
+    "upsert_new": {
+      "n": 5,
+      "p50_ms": 3.394,
+      "p95_ms": 3.452,
+      "max_ms": 3.452,
+      "mean_ms": 3.381,
+      "result_count": 14
+    },
+    "upsert_dedup": {
+      "n": 5,
+      "p50_ms": 4.386,
+      "p95_ms": 5.299,
+      "max_ms": 5.299,
+      "mean_ms": 4.732,
+      "result_count": 14
+    }
+  },
+  "flows": {
+    "brain_local_flow": {
+      "n": 3,
+      "p50_ms": 104.466,
+      "p95_ms": 106.936,
+      "max_ms": 106.936,
+      "mean_ms": 105.196,
+      "result_count": 3,
+      "signature": {
+        "profile": 1,
+        "search": 3,
+        "export": 626
+      }
+    },
+    "external_pass": {
+      "n": 1,
+      "p50_ms": 5123.153,
+      "p95_ms": 5123.153,
+      "max_ms": 5123.153,
+      "mean_ms": 5123.153,
+      "result_count": 1,
+      "signature": {
+        "total": 3838
+      }
+    }
+  },
+  "cold": {
+    "initialize": {
+      "samples_ms": [
+        13.846,
+        13.244,
+        13.215
+      ]
+    },
+    "integrity_check": {
+      "samples_ms": [
+        12.946,
+        13.08,
+        12.924
+      ]
+    },
+    "quick_check": {
+      "samples_ms": [
+        10.457,
+        10.626,
+        10.564
+      ]
+    },
+    "spawn_launcher": {
+      "ok": true,
+      "samples_ms": [
+        624.746,
+        385.503,
+        383.99
+      ]
+    },
+    "spawn_venv": {
+      "ok": true,
+      "samples_ms": [
+        360.486,
+        352.301,
+        356.265
+      ]
+    }
+  }
+}

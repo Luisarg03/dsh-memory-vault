@@ -14,11 +14,13 @@ import re as _re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from cli import get_memory_path
 from registry import build_type_maps, load_type_registry
 from tags import (
+    VOCAB_FILENAME,
     VocabularyError,
     _canonical_map,
     atomic_write_text,
@@ -220,8 +222,9 @@ def _replace_frontmatter_tags(text: str, tags: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _parse_okf_file(path: Path) -> dict | None:
+def _parse_okf_file_uncached(path: str | Path) -> dict | None:
     """Parse an OKF Markdown file. Returns an entry dict or None on failure."""
+    path = Path(path)
     try:
         text = path.read_text(encoding="utf-8")
     except Exception:
@@ -285,6 +288,30 @@ def _parse_okf_file(path: Path) -> dict | None:
     }
 
 
+@lru_cache(maxsize=50000)
+def _parse_okf_file_cached(path_str: str, mtime_ns: int, size: int) -> dict | None:
+    return _parse_okf_file_uncached(Path(path_str))
+
+
+def _parse_okf_file(path: str | Path) -> dict | None:
+    """Cache-fronted OKF parse keyed by (mtime_ns, size).
+
+    The Markdown scan path re-parses the same files on every retrieval; this
+    keeps the parse cached until the file changes on disk (any writer, any
+    process — the mtime check makes hand-edits visible exactly as before).
+    Returns a fresh shallow copy so callers may mutate the result (e.g.
+    ``entry["project"] = key``) without corrupting the cache. The entry dict
+    is flat (scalar values), so a shallow copy is sufficient.
+    """
+    path_str = os.fspath(path)
+    try:
+        st = os.stat(path_str)
+    except OSError:
+        return None
+    entry = _parse_okf_file_cached(path_str, st.st_mtime_ns, st.st_size)
+    return dict(entry) if entry is not None else None
+
+
 def _fts_terms(query: str) -> list[str]:
     """Split a user query into FTS5 query terms.
 
@@ -339,12 +366,33 @@ class MemoryStore:
             save_vocabulary(self.storage_path, vocab)
         return canonical, new_tags
 
+    def _vocab_readonly(self) -> dict:
+        """Query-side vocabulary, cached by (mtime_ns, size).
+
+        ``normalize_tags(..., register=False)`` and ``list_tags`` only read
+        the vocabulary, so the parsed dict is safe to share here. Registering
+        code (``_normalize_for_store`` and the upsert paths) must always load
+        fresh — it mutates and persists the catalog. A missing file caches the
+        empty catalog until one appears; a corrupt file stays a hard error
+        (load_vocabulary raises on every call, nothing is cached).
+        """
+        try:
+            st = (self.storage_path / VOCAB_FILENAME).stat()
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            key = None
+        cached = getattr(self, "_vocab_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        vocab = load_vocabulary(self.storage_path)
+        self._vocab_cache = (key, vocab)
+        return vocab
+
     def _normalize_for_query(
         self, tags: list[str] | None
     ) -> tuple[list[str], list[str]]:
         """Normalize filter tags (alias -> canonical). Never writes."""
-        vocab = load_vocabulary(self.storage_path)
-        return normalize_tags(tags, vocab, register=False)
+        return normalize_tags(tags, self._vocab_readonly(), register=False)
 
     def _type_dir(self, entry_type: str) -> str:
         return _TYPE_DIR_MAP[entry_type]
@@ -982,19 +1030,44 @@ class MemoryStore:
             wanted = {_TYPE_DIR_MAP.get(entry_type, entry_type + "s")}
         else:
             wanted = set(_TYPE_DIR_MAP.values())
-        for md in sorted(projects_dir.rglob("*.md")):
-            try:
-                rel = md.relative_to(projects_dir)
-            except ValueError:
+        # Scoped walk: a project filter only ever selects that key's subtree,
+        # so a vault-wide rglob is pure waste (it dominated every no-query
+        # retrieval). Nested keys resolve as directories (org/repo). The
+        # key == project filter below is unchanged, so nested siblings
+        # (projects/org also containing projects/org/repo) behave exactly as
+        # before. Keys that would escape projects/ yield nothing.
+        walk_root = projects_dir
+        if project is not None:
+            proj_path = Path(project)
+            if proj_path.is_absolute() or ".." in proj_path.parts:
+                return
+            walk_root = projects_dir / proj_path
+            if not walk_root.is_dir():
+                return
+        # Plain-string walk: pathlib's relative_to/is_relative_to dominated the
+        # per-file cost (profiling: the whole scan was relative_to). Sorting by
+        # rel-path parts tuples is exactly Path.__lt__ order (it compares
+        # str(p).split(sep) tuples; every path here shares the projects_dir
+        # prefix, so comparing the suffix is equivalent) on a case-sensitive
+        # filesystem, which fcntl-locked vaults require anyway.
+        root_str = str(projects_dir)
+        root_len = len(root_str) + 1
+        found: list[tuple[tuple[str, ...], str]] = []
+        for dirpath, _dirnames, filenames in os.walk(walk_root):
+            for name in filenames:
+                if name.endswith(".md"):
+                    rel = (dirpath + os.sep + name)[root_len:]
+                    found.append((rel.split(os.sep), rel))
+        found.sort()
+        for rel_parts, rel in found:
+            if len(rel_parts) < 3 or rel_parts[-2] not in wanted:
                 continue
-            if len(rel.parts) < 3 or rel.parts[-2] not in wanted:
-                continue
-            key = "/".join(rel.parts[:-2])
+            key = "/".join(rel_parts[:-2])
             if project is not None and key != project:
                 continue
             if _project_excluded(key, excludes):
                 continue
-            yield key, md
+            yield key, os.path.join(root_str, rel)
 
     def _profile_rows(
         self,
@@ -1162,7 +1235,7 @@ class MemoryStore:
             raise ValueError(f"limit must be an int in [1, 50], got {limit!r}")
         excludes = list(exclude_projects or [])
         filtered = project is not None or bool(excludes)
-        vocab = load_vocabulary(self.storage_path)
+        vocab = self._vocab_readonly()
         canon_map = vocab.get("canonical") or {}
 
         qlower = query.strip().lower() if query and query.strip() else None
