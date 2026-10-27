@@ -7,7 +7,9 @@
     "type": "git",
     "url": "git+https://github.com/Luisarg03/dsh-memory-vault.git"
   },
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "main": "extension.js",
   "exports": {
     ".": {
@@ -21,8 +23,12 @@
     "skills/"
   ],
   "pi": {
-    "extensions": ["./extension.js"],
-    "skills": ["./skills"]
+    "extensions": [
+      "./extension.js"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "scripts": {
     "test": "vitest run"
@@ -31,6 +37,6 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }
